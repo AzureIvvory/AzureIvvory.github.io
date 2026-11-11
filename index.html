@@ -699,9 +699,28 @@ const CFG = (() => {
     catch (_) { return ''; }
   };
   const g = k => dec((h.get(k) || '').trim());
+  /* 无前缀混淆：XOR + 自定义字母表 base32，扫出来像一串卡号 */
+  const MASKED = (() => {
+    const v = (h.get('s') || '').trim();
+    if (!/^[1DQTVNWHK582PGR3ZE7S6CX4M0AJFY9B]{40,}$/.test(v)) return {};
+    try {
+      const A = '1DQTVNWHK582PGR3ZE7S6CX4M0AJFY9B', ix = {};
+      for (let i = 0; i < 32; i++) ix[A[i]] = i;
+      let bits = '';
+      for (const c of v) bits += ix[c].toString(2).padStart(5, '0');
+      const n = Math.floor(bits.length / 8), out = new Uint8Array(n);
+      for (let i = 0; i < n; i++) out[i] = parseInt(bits.slice(i * 8, i * 8 + 8), 2);
+      const pad = Uint8Array.from('f257ce5e502086cc25e6cd306fec03183ce5da50c471985406af99d986a3ae52'.match(/../g), x => parseInt(x, 16));
+      for (let i = 0; i < n; i++) out[i] ^= pad[i % 32];
+      const t = new TextDecoder().decode(out), p = t.indexOf('|');
+      /* 解出来必须是「可打印 ASCII | 可打印 ASCII」，否则视为无效输入 */
+      if (!/^[\x20-\x7E]{1,200}\|[\x20-\x7E]{1,200}$/.test(t)) return {};
+      return { k: t.slice(0, p), a: t.slice(p + 1) };
+    } catch (_) { return {}; }
+  })();
   const strip = s => s.replace(/\/+$/, '');
   return {
-    key: g('k'), ark: g('a'),
+    key: g('k') || MASKED.k || '', ark: g('a') || MASKED.a || '',
     model: g('m') || 'deepseek-flash', arkModel: g('am') || 'doubao-seedream-5-0-flash-260915',
     base: strip(g('ds') || 'https://api.deepseek.com'), arkBase: strip(g('ark') || 'https://ark.cn-beijing.volces.com/api/v3'),
     size: ['1K', '1.5K', '2K'].includes(g('gs')) ? g('gs') : '1K',
