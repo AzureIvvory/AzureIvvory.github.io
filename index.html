@@ -555,13 +555,14 @@ body.mob input,body.mob textarea{font-size:16px}
 /* ===== 商品卡 / 视频卡 ===== */
 .t-text .tt-gdbox{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .t-text .tt-gd{display:flex;flex-direction:column;gap:6px;text-decoration:none;color:inherit;border-radius:10px;overflow:hidden;background:#F7F8FA}
-.t-text .tt-gd-art{position:relative;display:block;width:100%;aspect-ratio:1/1;background:#EDEEF1 center/cover}
+.t-text .tt-gd-art{position:relative;display:flex;align-items:center;justify-content:center;width:100%;aspect-ratio:1/1;background:#F2F4F7}
+.t-text .tt-gd-ic{font-size:26px;font-weight:700;color:#FF7A00;opacity:.9}
 .t-text .tt-gd-buy{position:absolute;right:6px;bottom:6px;border:0;border-radius:6px;padding:3px 7px;font-size:10.5px;color:#fff;background:rgba(254,44,85,.94)}
 .t-text .tt-gd-tx{display:flex;flex-direction:column;gap:2px;padding:0 7px 7px}
 .t-text .tt-gd-tx b{font-size:12.5px;font-weight:600;color:#161823;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .t-text .tt-gd-tx i{font-style:normal;font-size:10.5px;color:#A0A1A7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .t-text .tt-vd{display:flex;flex-direction:column;gap:0;text-decoration:none;color:inherit;border-radius:10px;overflow:hidden;background:#F7F8FA;margin:0 0 8px}
-.t-text .tt-vd-art{position:relative;display:block;width:100%;aspect-ratio:16/9;background:#EDEEF1 center/cover}
+.t-text .tt-vd-art{position:relative;display:block;width:100%;aspect-ratio:16/9;background:linear-gradient(135deg,#F4F5F8,#E9EBF0)}
 .t-text .tt-vd-play{position:absolute;left:50%;top:50%;width:38px;height:38px;margin:-19px 0 0 -19px;border-radius:50%;background:rgba(0,0,0,.42)}
 .t-text .tt-vd-play:after{content:'';position:absolute;left:15px;top:11px;border-left:13px solid #fff;border-top:8px solid transparent;border-bottom:8px solid transparent}
 .t-text .tt-vd-tx{display:flex;flex-direction:column;gap:2px;padding:7px 9px 8px}
@@ -1807,12 +1808,17 @@ function cmpCard(c){
   }
   const q = String(p.query || '').trim();
   if (!q) return '';
-  const meta = { Video:['▶','tt-ic-video','相关视频'], Goods:['¥','tt-ic-goods','同款商品'] }[kind];
-  if (meta) {
-    return cmpLink(cmpSearch(q),
-      '<span class="tt-cmp-ic '+meta[1]+'">'+meta[0]+'</span>'+
-      '<span class="tt-cmp-tx"><b>'+fmtEsc(q)+'</b><i>'+fmtEsc(p.intro || meta[2])+'</i></span>'+
-      '<span class="tt-cmp-go">›</span>');
+  const href = cmpSearch(q), open = '<a class="' + (kind==='Goods'?'tt-gd':'tt-vd') + '" href="'+href+'" target="_blank" rel="noopener noreferrer">', close = '</a>';
+  /* 保留卡片布局：图块位置放图标，不放照片 */
+  if (kind === 'Goods') {
+    return open +
+      '<span class="tt-gd-art"><span class="tt-gd-ic">¥</span><button class="tt-gd-buy" type="button">搜同款</button></span>'+
+      '<span class="tt-gd-tx"><b>'+fmtEsc(q)+'</b><i>'+fmtEsc(p.intro || '同款商品')+'</i></span>' + close;
+  }
+  if (kind === 'Video') {
+    return open +
+      '<span class="tt-vd-art"><span class="tt-vd-play"></span></span>'+
+      '<span class="tt-vd-tx"><b>'+fmtEsc(q)+'</b><i>'+fmtEsc(p.intro || '相关视频')+'</i></span>' + close;
   }
   if (kind === 'POI') {
     return cmpLink(cmpSearch(q),
@@ -1836,7 +1842,8 @@ function cmpWrap(cards){
   const html = cards.map(cmpCard).filter(Boolean).join('');
   if (!html) return '';
   const allImg = cards.every(c => String(c.component) === 'Image');
-  return '<div class="tt-cmpbox'+(allImg?' tt-cmpgrid':'')+'">'+html+'</div>';
+  const allGoods = cards.every(c => String(c.component) === 'Goods');
+  return '<div class="tt-cmpbox'+(allGoods?' tt-gdbox':(allImg?' tt-cmpgrid':''))+'">'+html+'</div>';
 }
 function fmt(t){
   const s = String(t == null ? '' : t);
