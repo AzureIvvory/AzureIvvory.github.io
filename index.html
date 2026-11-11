@@ -786,7 +786,7 @@ const CFG = (() => {
     key: g('k') || MASKED.k || '', ark: g('a') || MASKED.a || '',
     model: g('m') || 'deepseek-flash', arkModel: g('am') || 'doubao-seedream-5-0-flash-260915',
     base: strip(g('ds') || 'https://api.deepseek.com'), arkBase: strip(g('ark') || 'https://ark.cn-beijing.volces.com/api/v3'),
-    size: ['1K', '1.5K', '2K'].includes(g('gs')) ? g('gs') : '1K',
+    size: ['1K', '1.5K', '2K'].includes(g('gs')) ? g('gs') : '1K', thinkSet: h.has('think'),
     think: g('think') === '1', set: g('set') === '1', mob: g('mob'), files: g('files') !== '0',
   };
 })();
@@ -2121,7 +2121,10 @@ $('qChips') && ($('qChips').onclick = e => {
 /* ================= 实时版：DeepSeek / Seedream / 本地图片 / 设置 ================= */
 const THINK_KEY='pzw-think';
 (function initThink(){
-  try{ const v=JSON.parse(localStorage.getItem(THINK_KEY)||'{}'); $('thinkOn').checked=!!v.on; if(v.effort) $('thinkEffort').value=v.effort; }catch(_){}
+  const DEF={on:true, effort:'high'};   /* medium 在 DeepSeek 上映射为 high，只有 low/high/max 三档 */
+  try{ const v=JSON.parse(localStorage.getItem(THINK_KEY)||'{}');
+    $('thinkOn').checked = (v.on === undefined) ? DEF.on : !!v.on;
+    $('thinkEffort').value = v.effort || DEF.effort; }catch(_){ $('thinkOn').checked=DEF.on; }
   const save=()=>{ try{ localStorage.setItem(THINK_KEY, JSON.stringify(thinkCfg())); }catch(_){} };
   $('thinkOn').onchange=save; $('thinkEffort').onchange=save;
 })();
@@ -2313,7 +2316,8 @@ async function realTurn(tb, t, idx, gen){
         const line=buf.slice(0,k).trim(); buf=buf.slice(k+1);
         if(!line.startsWith('data:')) continue;
         let j; try{ j=JSON.parse(line.slice(5)); }catch(_){ continue; }
-        if(j.type==='reasoning') onReason();
+        if(j.type==='round'){ if((j.n||1) > 1 && full){ full=''; tx.innerHTML=''; } }
+        else if(j.type==='reasoning') onReason();
         else if(j.type==='image'){ pauseThink(); onImage(j); }
         else if(j.type==='delta'){ pauseThink(); full+=j.text; tx.innerHTML=fmtPartial(visiblePart(full)); }
         else if(j.type==='messages'){ t.chain=j.messages||[]; }
@@ -2557,7 +2561,7 @@ addEventListener('resize', fit); fit();
 show('entry');
 
 /* ---------- 单页版收尾 ---------- */
-if(!CFG.set){ $('setOpen').hidden=true; $('thinkOn').checked=CFG.think; $('webSearch').checked=true; $('genOn').checked=true; $('spText').value=SP_DEFAULT; }
+if(!CFG.set){ $('setOpen').hidden=true; if(CFG.thinkSet) $('thinkOn').checked=CFG.think; $('webSearch').checked=true; $('genOn').checked=true; $('spText').value=SP_DEFAULT; }
 $('genSize').value=CFG.size; updateTail();
 if(CFG.key){
   $('intro').hidden=false;
