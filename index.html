@@ -1,4 +1,6 @@
-<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><link rel="stylesheet" href="./katex/katex.min.css">
+<script src="./katex/katex.min.js" defer></script>
+</head><body>
 <title>拍照问</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <style>
@@ -1722,6 +1724,10 @@ function fmtInline(src){
   const marks=[], links=[];
   let s = String(src);
   s = s.replace(/<mark>([\s\S]*?)<\/mark>/g,(_,x)=>{ marks.push(x); return '\u0000M'+(marks.length-1)+'\u0000'; });
+  /* 行间/行内公式：先摘成占位符，渲染完再还原，避免被转义 */
+  const math=[];
+  s = s.replace(/\$\$([\s\S]{1,400}?)\$\$/g,(_,tex)=>{ math.push([tex,true]); return '\u0000X'+(math.length-1)+'\u0000'; });
+  s = s.replace(/\$([^$\n]{1,120}?)\$/g,(_,tex)=> ( /[\\^_=]/.test(tex) ? (math.push([tex,false]), '\u0000X'+(math.length-1)+'\u0000') : _ ));
   s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g,(_,txt,url)=>{
     const u = url === '{{GENERAL_SEARCH_URL}}' ? ('https://www.douyin.com/search/'+encodeURIComponent(txt)) : url;
     /* 只放行抖音站内链接，其余一律降级为纯文本 */
@@ -1734,7 +1740,20 @@ function fmtInline(src){
   s = s.replace(/`([^`\n]+)`/g,'<code class="tt-code">$1</code>');
   s = s.replace(/\u0000M(\d+)\u0000/g,(_,i)=>'<mark>'+fmtEsc(marks[+i])+'</mark>');
   s = s.replace(/\u0000L(\d+)\u0000/g,(_,i)=>links[+i]);
+  s = s.replace(/\u0000X(\d+)\u0000/g,(_,i)=>mathHTML(math[+i][0], math[+i][1]));
   return s;
+}
+const MATH_CACHE = new Map();
+function mathHTML(tex, display){
+  const key = (display ? 'D:' : 'I:') + tex;
+  if (MATH_CACHE.has(key)) return MATH_CACHE.get(key);
+  let html;
+  try {
+    if (window.katex && tex.trim()) html = window.katex.renderToString(tex, { displayMode: !!display, throwOnError: false, output: 'html' });
+  } catch(_) {}
+  if (!html) html = fmtEsc((display ? '$$' : '$') + tex + (display ? '$$' : '$'));
+  MATH_CACHE.set(key, html);
+  return html;
 }
 const fmtSplitRow = l => l.trim().replace(/^\|/,'').replace(/\|$/,'').split('|').map(s=>s.trim());
 const fmtIsRow = l => /^\s*\|.*\|\s*$/.test(l);
