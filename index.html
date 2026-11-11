@@ -565,6 +565,12 @@ body.mob input,body.mob textarea{font-size:16px}
 .t-text .tt-vd-tx{display:flex;flex-direction:column;gap:2px;padding:7px 9px 8px}
 .t-text .tt-vd-tx b{font-size:13px;font-weight:600;color:#161823;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .t-text .tt-vd-tx i{font-style:normal;font-size:11px;color:#A0A1A7}
+
+/* ===== 框选提示条：胶囊 + 搜同款按钮 ===== */
+.crop-tip{display:inline-flex;align-items:center;gap:10px;padding:6px 8px 6px 13px;border-radius:999px;background:rgba(22,24,35,.72);backdrop-filter:blur(8px)}
+.crop-tip span{font-size:12px;color:#fff;white-space:nowrap}
+.crop-tip button{border:0;border-radius:999px;padding:5px 12px;font-size:12px;font-weight:600;color:#fff;background:#FE2C55;white-space:nowrap}
+.crop-tip button:active{transform:scale(.96)}
 </style>
 
 <div class="stage">
@@ -639,7 +645,7 @@ body.mob input,body.mob textarea{font-size:16px}
         <!-- RESULT -->
         <section class="scr" id="s-result" hidden>
           <div class="sb w"><span>9:41</span><i><svg width="18" height="11" viewBox="0 0 18 11" fill="currentColor"><rect x="0" y="7" width="3" height="4" rx="1"/><rect x="5" y="5" width="3" height="6" rx="1"/><rect x="10" y="2.5" width="3" height="8.5" rx="1"/><rect x="15" y="0" width="3" height="11" rx="1"/></svg><svg width="16" height="12" viewBox="0 0 16 12" fill="currentColor" stroke="currentColor" stroke-width=".5" stroke-linejoin="round"><path d="M8 11.2 5.8 8.9A3.1 3.1 0 0 1 10.2 8.9Z"/><path d="M3.4 6.4A6.6 6.6 0 0 1 12.6 6.4L11.2 7.8A4.6 4.6 0 0 0 4.8 7.8Z"/><path d="M.9 3.9A10.2 10.2 0 0 1 15.1 3.9L13.7 5.3A8.2 8.2 0 0 0 2.3 5.3Z"/></svg><svg width="26" height="12" viewBox="0 0 26 12"><rect x=".5" y=".5" width="22" height="11" rx="3" fill="none" stroke="currentColor" opacity=".4"/><rect x="2" y="2" width="19" height="8" rx="2" fill="currentColor"/><rect x="24" y="4" width="1.5" height="4" rx=".7" fill="currentColor" opacity=".4"/></svg></i></div>
-          <div class="r-top"><div class="r-bg" id="rBg"></div><div class="r-img" id="rImg"></div><div class="crop" id="crop" hidden><i class="c tl"></i><i class="c tr"></i><i class="c bl"></i><i class="c br" id="cropRs"></i></div><div class="crop-tip" id="cropTip" hidden>拖动框选，搜同款</div></div>
+          <div class="r-top"><div class="r-bg" id="rBg"></div><div class="r-img" id="rImg"></div><div class="crop" id="crop" hidden><i class="c tl"></i><i class="c tr"></i><i class="c bl"></i><i class="c br" id="cropRs"></i></div><div class="crop-tip" id="cropTip" hidden><span>拖动框选要搜的区域</span><button class="pl" id="cropGo" type="button">搜同款</button></div></div>
           <div class="r-thumbs" id="rThumbs"></div>
           <div class="sheet" id="sheet">
             <div class="handle" id="handle" title="展开 / 收起"><i></i></div>
@@ -2428,6 +2434,43 @@ function routeImported(ids){
   if(CAMS.main) CAMS.main.stop();
   openComposer(ids,'first');
 }
+
+/* ---------- 框选 → 裁成一张图，走导入管道发起真实提问 ---------- */
+function cropRegionImage(id, box, cb){
+  const src = hi(id);
+  if(!src) return cb(null);
+  const im = new Image();
+  im.onload = () => {
+    try{
+      const b = box || {x:0, y:0, w:1, h:1};
+      const w = Math.max(1, Math.round(b.w * im.naturalWidth));
+      const h = Math.max(1, Math.round(b.h * im.naturalHeight));
+      const x = Math.min(Math.max(0, Math.round(b.x * im.naturalWidth)), Math.max(0, im.naturalWidth - w));
+      const y = Math.min(Math.max(0, Math.round(b.y * im.naturalHeight)), Math.max(0, im.naturalHeight - h));
+      // 长边压到 1024，避免把大图整块塞进对话
+      const k = Math.min(1, 1024 / Math.max(w, h));
+      const cv = document.createElement('canvas');
+      cv.width = Math.round(w * k); cv.height = Math.round(h * k);
+      cv.getContext('2d').drawImage(im, x, y, w, h, 0, 0, cv.width, cv.height);
+      cv.toBlob(blob => cb(blob, cv.width, cv.height), 'image/png');
+    }catch(e){ cb(null); }
+  };
+  im.onerror = () => cb(null);
+  im.src = src;
+}
+$('cropGo').onclick = e => {
+  e.preventDefault(); e.stopPropagation();
+  if(!G.img) return;
+  const box = G.box && (G.box.w * G.box.h >= 0.012) ? G.box : null;   // 太小的框按整图处理
+  $('cropGo').disabled = true; $('cropGo').textContent = '识别中';
+  cropRegionImage(G.img, box, (blob, w, h) => {
+    $('cropGo').disabled = false; $('cropGo').textContent = '搜同款';
+    if(!blob){ toast('这张图取不到原图，换个图试试'); return; }
+    const f = new File([blob], 'crop-' + Date.now() + '.png', { type:'image/png' });
+    importFiles([f], routeImported);
+    setTimeout(()=>{ const q=$('cpQ'); if(q && !q.value) q.value='帮我找同款'; }, 260);
+  });
+};
 $('fileIn').onchange = e => { const fs=e.target.files; importFiles(fs, routeImported); e.target.value=''; };
 $('picIn').onchange = e => { const fs=e.target.files; importFiles(fs, routeImported); e.target.value=''; };
 $('rPic').onclick = () => { if(S.busy) return; $('picIn').click(); };
