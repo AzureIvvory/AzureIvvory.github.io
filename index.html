@@ -546,7 +546,8 @@ body.mob input,body.mob textarea{font-size:16px}
 .t-text .tt-cmpgrid .tt-cmp-tx{width:100%}
 
 /* ===== 生图等待：流光文字 + 百分比，无进度条 ===== */
-.gimg.loading{aspect-ratio:auto!important;height:190px}
+.gen .gimg{max-width:214px;margin:0 auto}
+.gimg.loading{aspect-ratio:auto!important;height:150px}
 .gimg .gover.genw{top:50%;transform:translate(-50%,-50%);width:auto;min-width:132px;display:flex;flex-direction:column;align-items:center;gap:7px;padding:14px 18px;background:rgba(255,255,255,.92)}
 .gshim{font-size:13px;font-weight:600;letter-spacing:.02em;background:linear-gradient(100deg,#C6C8CE 20%,#161823 48%,#161823 52%,#C6C8CE 80%);background-size:220% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:shimmer 2s linear infinite}
 @keyframes shimmer{0%{background-position:120% 0}100%{background-position:-60% 0}}
@@ -1806,19 +1807,12 @@ function cmpCard(c){
   }
   const q = String(p.query || '').trim();
   if (!q) return '';
-  if (kind === 'Goods') {
-    const art = cmpPhoto('Goods');
-    return '<a class="tt-gd" href="'+cmpSearch(q)+'" target="_blank" rel="noopener noreferrer">'+
-      '<span class="tt-gd-art"'+ (art ? ' style="background-image:url('+art+')"' : '') +'>'+
-        '<button class="tt-gd-buy" type="button">搜同款</button></span>'+
-      '<span class="tt-gd-tx"><b>'+fmtEsc(q)+'</b><i>以你的这张图搜同款</i></span></a>';
-  }
-  if (kind === 'Video') {
-    const cover = cmpPhoto('Video');
-    return '<a class="tt-vd" href="'+cmpSearch(q)+'" target="_blank" rel="noopener noreferrer">'+
-      '<span class="tt-vd-art"'+ (cover ? ' style="background-image:url('+cover+')"' : '') +'>'+
-        '<span class="tt-vd-play"></span></span>'+
-      '<span class="tt-vd-tx"><b>'+fmtEsc(q)+'</b><i>'+fmtEsc(p.intro || '相关视频')+'</i></span></a>';
+  const meta = { Video:['▶','tt-ic-video','相关视频'], Goods:['¥','tt-ic-goods','同款商品'] }[kind];
+  if (meta) {
+    return cmpLink(cmpSearch(q),
+      '<span class="tt-cmp-ic '+meta[1]+'">'+meta[0]+'</span>'+
+      '<span class="tt-cmp-tx"><b>'+fmtEsc(q)+'</b><i>'+fmtEsc(p.intro || meta[2])+'</i></span>'+
+      '<span class="tt-cmp-go">›</span>');
   }
   if (kind === 'POI') {
     return cmpLink(cmpSearch(q),
@@ -1842,8 +1836,7 @@ function cmpWrap(cards){
   const html = cards.map(cmpCard).filter(Boolean).join('');
   if (!html) return '';
   const allImg = cards.every(c => String(c.component) === 'Image');
-  const allGoods = cards.every(c => String(c.component) === 'Goods');
-  return '<div class="tt-cmpbox'+(allGoods?' tt-gdbox':(allImg?' tt-cmpgrid':''))+'">'+html+'</div>';
+  return '<div class="tt-cmpbox'+(allImg?' tt-cmpgrid':'')+'">'+html+'</div>';
 }
 function fmt(t){
   const s = String(t == null ? '' : t);
