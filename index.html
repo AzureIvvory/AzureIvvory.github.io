@@ -2121,7 +2121,7 @@ $('qChips') && ($('qChips').onclick = e => {
 /* ================= 实时版：DeepSeek / Seedream / 本地图片 / 设置 ================= */
 const THINK_KEY='pzw-think';
 (function initThink(){
-  const DEF={on:true, effort:'high'};   /* medium 在 DeepSeek 上映射为 high，只有 low/high/max 三档 */
+  const DEF={on:true, effort:'low'};    /* 只有 low/high/max 三档，medium 会被映射成 high */
   try{ const v=JSON.parse(localStorage.getItem(THINK_KEY)||'{}');
     $('thinkOn').checked = (v.on === undefined) ? DEF.on : !!v.on;
     $('thinkEffort').value = v.effort || DEF.effort; }catch(_){ $('thinkOn').checked=DEF.on; }
