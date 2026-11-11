@@ -1189,12 +1189,7 @@ const ENG = (() => {
     for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
       emit({ type: 'round', n: round + 1 });
       const res = await openChat(msgs, round < MAX_TOOL_ROUNDS ? tools : null, think, signal);
-      let pend = '';   /* 本轮正文先攒着：确认没调用工具再交给前端 */
-      const [msg, finish] = await streamChat(res, (kind, text) => {
-        if (kind === 'reasoning') emit({ type: 'reasoning', text });
-        else pend += text;
-      }, signal);
-      if (!(msg && msg.tool_calls && msg.tool_calls.length) && pend) emit({ type: 'delta', text: pend });
+      const [msg, finish] = await streamChat(res, (kind, text) => emit({ type: kind === 'text' ? 'delta' : 'reasoning', text }), signal);
       if (finish === 'length') emit({ type: 'notice', text: '回答达到长度上限被截断' });
       msgs.push(msg); chain.push(msg);
       if (!msg.tool_calls) break;
@@ -2303,8 +2298,8 @@ async function realTurn(tb, t, idx, gen){
   const pill=(key, cls, text)=>{ let el=pills[key]; if(!el){ el=document.createElement('div'); tools.appendChild(el); pills[key]=el; } el.className='tool '+cls; el.textContent=text; };
   // 深度思考：不显示思考内容，只显示动效提示和用时
   const TH={t0:0, t1:0};
-  const onReason=()=>{ if(!tx.querySelector('.wait-cur')) tx.insertAdjacentHTML('beforeend','<span class="cur wait-cur"></span>'); };
-  const pauseThink=()=>{ const c=tx.querySelector('.wait-cur'); if(c) c.remove(); };
+  const onReason=()=>{};
+  const pauseThink=()=>{};
   const AR={'1:1':1,'3:4':.75,'4:3':4/3,'9:16':9/16,'16:9':16/9,'2:3':2/3,'3:2':1.5};
   // 生图进度：接口不返回真实进度，按最近几次实际耗时（中位数）估算；超出预计时间换成提示文字
   const onImage=j=>{
@@ -2356,25 +2351,7 @@ async function realTurn(tb, t, idx, gen){
         let j; try{ j=JSON.parse(line.slice(5)); }catch(_){ continue; }
         if(j.type==='reasoning') onReason();
         else if(j.type==='image'){ pauseThink(); onImage(j); }
-        else if(j.type==='delta'){
-          pauseThink();
-          // 模型这一轮已经定稿，开始按字吐出。长度越长吐得越快，最多 3 秒吐完
-          const from = full.length;
-          full += j.text;
-          const total = full.length - from;
-          if (total <= 0) { tx.innerHTML = fmtPartial(visiblePart(full)); }
-          else {
-            const dur = Math.min(3, Math.max(0.35, total / 90));
-            const step = Math.max(1, Math.ceil(total / (dur * 60)));
-            let shown = 0;
-            clearInterval(tx._type);
-            tx._type = setInterval(() => {
-              shown = Math.min(total, shown + step);
-              tx.innerHTML = fmtPartial(visiblePart(full.slice(0, from + shown)));
-              if (shown >= total) { clearInterval(tx._type); tx._type = null; }
-            }, 16);
-          }
-        }
+        else if(j.type==='delta'){ pauseThink(); full+=j.text; tx.innerHTML=fmtPartial(visiblePart(full)); }
         else if(j.type==='messages'){ t.chain=j.messages||[]; }
         else if(j.type==='notice') pill('n:'+j.text,'bad',j.text);
         else if(j.type==='search' || j.type==='fetch'){
