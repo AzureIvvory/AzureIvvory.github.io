@@ -690,7 +690,15 @@ body.mob input,body.mob textarea{font-size:16px}
    可选：m=模型  am=生图模型  gs=1K|1.5K|2K  think=1  set=1（显示设置）  mob=1|0（强制 / 关闭手机全屏）
         files=0（不用 Files API，图片全部内联）  ds= / ark=（接口地址，测试或中转用） */
 const CFG = (() => {
-  const h = new URLSearchParams(location.hash.replace(/^#/, '')), g = k => (h.get(k) || '').trim();
+  const h = new URLSearchParams(location.hash.replace(/^#/, ''));
+  /* b64: 前缀 = URL-safe base64（padding 可有可无）；不带前缀的明文照旧可用 */
+  const dec = s => {
+    if (!s.startsWith('b64:')) return s;
+    const b = s.slice(4).replace(/-/g, '+').replace(/_/g, '/').replace(/=+$/, '');
+    try { return new TextDecoder().decode(Uint8Array.from(atob(b + '='.repeat((4 - b.length % 4) % 4)), c => c.charCodeAt(0))); }
+    catch (_) { return ''; }
+  };
+  const g = k => dec((h.get(k) || '').trim());
   const strip = s => s.replace(/\/+$/, '');
   return {
     key: g('k'), ark: g('a'),
