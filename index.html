@@ -578,6 +578,7 @@ body.mob input,body.mob textarea{font-size:16px}
 .crop-tip button{border:0;border-radius:999px;padding:5px 12px;font-size:12px;font-weight:600;color:#fff;background:#FE2C55;white-space:nowrap}
 .crop-tip button:active{transform:scale(.96)}
 .t-text .tt-code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;padding:1px 4px;border-radius:4px;background:#F2F4F7;color:#3A3C45}
+.fail-note{margin:0;font-size:13px;color:#8A8B91}
 </style>
 
 <div class="stage">
@@ -1392,35 +1393,90 @@ $('scShutter').onclick=()=>{
   if(!D.imgs.includes('bluecam')) D.imgs=[...D.imgs,'bluecam'].slice(0,10); renderCp(); closeSubCam(()=>{ const th=$('cpThumbs').querySelector('[data-v="bluecam"]'); if(th && !RM) th.animate([{transform:'scale(.4)'},{transform:'none'}],{duration:320,easing:'cubic-bezier(.3,1.6,.5,1)'}); }); };
 
 /* ---------- 借鉴链路1：搜索历史带图片和轮次，点开恢复会话 ---------- */
-const HIST=[
+const HIST_SEED=[
   {turns:[{imgs:['cafe','stripe'],q:'这件穿上好看吗'},{imgs:['bluecam'],q:'换这件'}]},
   {text:'咖啡馆拍照姿势'},{text:'奶咖色系妆容教程'}
 ];
-const HIST_MAX=3;
+const HIST=[];            /* 运行时由 IndexedDB 填充；空库时才落 HIST_SEED */
+const HIST_MAX=12;
+
+/* ---------- 会话持久化：IndexedDB。图片以 dataURL 一起存，容量远大于 localStorage ---------- */
+let _pzwDB=null;
+function pzwDB(){
+  if(_pzwDB) return _pzwDB;
+  _pzwDB=new Promise((res,rej)=>{
+    if(!window.indexedDB){ rej(new Error('no indexedDB')); return; }
+    const r=indexedDB.open('pzw-sessions',1);
+    r.onupgradeneeded=()=>{ const db=r.result; if(!db.objectStoreNames.contains('sessions')) db.createObjectStore('sessions',{keyPath:'id'}); };
+    r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error);
+  });
+  return _pzwDB;
+}
+async function dbPut(rec){
+  const db=await pzwDB();
+  return new Promise((res,rej)=>{ const tx=db.transaction('sessions','readwrite'); tx.objectStore('sessions').put(rec); tx.oncomplete=()=>res(true); tx.onerror=()=>rej(tx.error); });
+}
+async function dbAll(){
+  const db=await pzwDB();
+  return new Promise((res,rej)=>{ const out=[]; const tx=db.transaction('sessions','readonly'); const q=tx.objectStore('sessions').openCursor();
+    q.onsuccess=()=>{ const c=q.result; if(c){ out.push(c.value); c.continue(); } else res(out); }; q.onerror=()=>rej(q.error); });
+}
+const thumbOf=(h,id)=> (h && h.images && h.images[id]) || (IMG[id] && (IMG[id].t||IMG[id].hi)) || '';
 function histTitle(h){ const t=h.turns; return (t.find(x=>x.q)||{}).q || '图片提问'; }
 function renderHist(newFirst){
   $('histList').innerHTML = HIST.slice(0,HIST_MAX).map((h,i)=> h.text
     ? `<div class="hrow"><svg viewBox="0 0 24 24" class="ic" style="width:15px;height:15px;color:#A0A1A7"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="htx">${h.text}</span><span class="hx">×</span></div>`
-    : `<button class="pl hrow${newFirst&&i===0?' new':''}" data-h="${i}"><span class="hth">${[...new Set(h.turns.flatMap(t=>t.imgs))].slice(0,3).map(id=>`<i style="background-image:url(${IMG[id].t})"></i>`).join('')}</span><span class="htx">${histTitle(h).replace(/</g,'&lt;')}</span>${h.turns.length>1?`<span class="hr">${h.turns.length}轮</span>`:''}<span class="hx">×</span></button>`).join('');
+    : `<button class="pl hrow${newFirst&&i===0?' new':''}" data-h="${i}"><span class="hth">${[...new Set(h.turns.flatMap(t=>t.imgs))].slice(0,3).map(id=>`<i style="background-image:url(${thumbOf(h,id)})"></i>`).join('')}</span><span class="htx">${histTitle(h).replace(/</g,'&lt;')}</span>${h.turns.length>1?`<span class="hr">${h.turns.length}轮</span>`:''}<span class="hx">×</span></button>`).join('');
 }
-function saveHist(){
-  if(!S.turns.length || S.busy) return;
-  // 一次会话只保留一条历史：继续聊会更新原来那条，而不是再存一个版本；图片会话只保留最近一条
-  for(let k=HIST.length-1;k>=0;k--) if(HIST[k].turns) HIST.splice(k,1);
-  HIST.unshift({turns:S.turns.map(t=>({imgs:[...t.imgs],q:t.q,answer:t.answer,chain:t.chain,sugg:t.sugg,genImgs:t.genImgs}))});
-  HIST.length=Math.min(HIST.length,HIST_MAX); return true;
+async function saveHist(){
+  if(!S.turns.length) return false;
+  if(!S.sid) S.sid='s'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+  const turns=S.turns.map(t=>({
+    imgs:[...t.imgs], q:t.q||'',
+    answer: t.answer==null ? null : t.answer,
+    chain: t.chain||null, sugg: t.sugg||[],
+    genImgs:(t.genImgs||[]).map(g=>({url:g.url, ar:g.ar})),
+    status: t.status || (t.answer!=null ? 'done' : (S.busy ? 'running' : 'interrupted')),
+  }));
+  const images={};
+  for(const id of new Set(turns.flatMap(t=>t.imgs))){ const src=(IMG[id]&&(IMG[id].hi||IMG[id].t))||''; if(src) images[id]=src; }
+  const rec={ id:S.sid, title:histTitle({turns}), updatedAt:Date.now(), turns, images };
+  try{ await dbPut(rec); }catch(_){ /* 存不下就只在内存里 */ }
+  const i=HIST.findIndex(h=>h.id===S.sid);
+  if(i>=0) HIST[i]=rec; else HIST.unshift(rec);
+  if(HIST.length>HIST_MAX) HIST.length=HIST_MAX;
+  renderHist(true);
+  return true;
 }
-function restoreSession(h){
+async function restoreSession(h){
   S.gen++; S.busy=false; S.mode=h.turns.length>1?'multi':'first'; S.expanded=h.turns.length>1;
-  S.turns=h.turns.map(t=>({...t, imgs:[...t.imgs], genImgs:[...(t.genImgs||[])]}));
-  // 实时回答：用保存的回答和生成图复原；继续聊时完整消息链（chain）会原样带给模型
-  S.turns.forEach((t,i)=>{ t.r = t.answer!=null ? {text:t.answer, items:t.genImgs.map(g=>({img:g.url, ar:g.ar||.75, title:'', gen:true})), sugg:t.sugg||[]} : compose(t,S.turns.slice(0,i)); });
+  S.sid=h.id||('s'+Date.now().toString(36));
+  // 把历史里的图片重新登记成本次会话可用的 IMG 项
+  const map={};
+  for(const [oldId,src] of Object.entries(h.images||{})){
+    if(IMG[oldId] && (IMG[oldId].hi||IMG[oldId].t)===src){ map[oldId]=oldId; continue; }
+    const nid='h'+oldId+'_'+Date.now().toString(36);
+    IMG[nid]={t:src, hi:src, label:'历史图片', kind:'thing', user:true};
+    map[oldId]=nid;
+  }
+  S.turns=h.turns.map(t=>({ imgs:(t.imgs||[]).map(i=>map[i]||i), q:t.q||'', answer:t.answer, chain:t.chain, sugg:t.sugg||[], genImgs:(t.genImgs||[]) }));
+  // 没有回答的那一轮如实标成未完成，不再拿演示脚本补
+  S.turns.forEach(t=>{
+    t.r = t.answer!=null
+      ? {text:t.answer, items:(t.genImgs||[]).map(g=>({img:g.url, ar:g.ar||.75, title:'', gen:true})), sugg:t.sugg||[]}
+      : {text:'', items:[], sugg:[], failed:true, status:t.status||'interrupted'};
+  });
   layoutTop(); setTop(); setGoods(); renderStatic(true); setSheetTab('all'); $('shBody').scrollTop=0;
   show('result','up');
-  if(!RM){ const last=$('shBody').lastElementChild; }
 }
 $('histList').addEventListener('click', e=>{ const b=e.target.closest('[data-h]'); if(!b) return; if(e.target.closest('.hx')){ HIST.splice(+b.dataset.h,1); renderHist(); return; } restoreSession(HIST[+b.dataset.h]); });
-renderHist();
+(function bootHist(){
+  dbAll().then(all=>{
+    if(!all.length){ HIST.push(...HIST_SEED); renderHist(); return; }
+    all.sort((a,b)=>b.updatedAt-a.updatedAt).slice(0,HIST_MAX).forEach(r=>HIST.push(r));
+    renderHist();
+  }).catch(()=>{ HIST.push(...HIST_SEED); renderHist(); });
+})();
 
 /* ---------- 链路3：相机页底部相册条 ---------- */
 function renderStrip(){
@@ -1924,7 +1980,8 @@ function itemHTML(it, idx, multi, loading){
   return `<div class="gen fade">${head}<div class="gimg${loading?' loading':''}" data-src="${it.img}" style="--ar:${it.ar};${loading?'':`background-image:url(${it.img})`}"><span class="lbl">${it.gen?'AI 生成':'AI 试穿'}</span></div></div>`;
 }
 function fillDone(body, r){
-  body.innerHTML = `<div class="t-text">${fmt(r.text)}</div>` + r.items.map((it,i)=>itemHTML(it,i,r.items.length>1,false)).join('')
+  if(r.failed) body.innerHTML = `<div class="t-text"><p class="fail-note">这一轮没有完成，可以重新提问。</p></div><div class="acts">${svg('down')}${svg('copy')}${svg('share')}${svg('spk')}</div>`;
+  else body.innerHTML = `<div class="t-text">${fmt(r.text)}</div>` + r.items.map((it,i)=>itemHTML(it,i,r.items.length>1,false)).join('')
     + `<div class="acts">${svg('down')}${svg('copy')}${svg('share')}${svg('spk')}</div>`;
 }
 function suggHTML(list){ return list.length?`<div class="sugg">${list.map((s,i)=>`<button class="pl" data-s="${s}" style="animation-delay:${120+i*80}ms">${s}</button>`).join('')}</div>`:''; }
@@ -2125,7 +2182,7 @@ function updatePanel(){ if(!$('nodes1')) return;
   document.querySelectorAll('#cases span').forEach(s=>s.classList.toggle('on', s.dataset.c===c));
 }
 
-function reset(anim='fade'){ if(S.abort) try{S.abort.abort()}catch(_){}; if(CAMS.main) CAMS.main.stop(); if(CAMS.sub) CAMS.sub.stop(); S.upTok=(S.upTok||0)+1; $('composer').hidden=true; $('asheet').hidden=true; $('subcam').hidden=true; G.img=null; G.sort='all'; S.draft=null; S.gen++; clearTimeout(upTimer); S.turns=[]; S.sel=[]; S.mode='first'; S.busy=false; S.expanded=false; $('rQ').value=''; $('alQ').value=''; show('entry', typeof anim==='string'?anim:'fade'); }
+function reset(anim='fade'){ if(S.turns.length) saveHist(); S.sid=null; if(S.abort) try{S.abort.abort()}catch(_){}; if(CAMS.main) CAMS.main.stop(); if(CAMS.sub) CAMS.sub.stop(); S.upTok=(S.upTok||0)+1; $('composer').hidden=true; $('asheet').hidden=true; $('subcam').hidden=true; G.img=null; G.sort='all'; S.draft=null; S.gen++; clearTimeout(upTimer); S.turns=[]; S.sel=[]; S.mode='first'; S.busy=false; S.expanded=false; $('rQ').value=''; $('alQ').value=''; show('entry', typeof anim==='string'?anim:'fade'); }
 const DEMOS = {
   A:()=>toMid(['cafe'],''),
   B:()=>toMid(['cafe'],'我适合什么妆容'),
@@ -2324,7 +2381,8 @@ async function realTurn(tb, t, idx, gen){
     if(j.status==='done'){
       if(pctEl) pctEl.textContent='100%'; if(shimEl) shimEl.textContent='正在载入…';
       const im=new Image();
-      im.onload=()=>{ const g=c.querySelector('.gimg'), ar=im.naturalWidth/im.naturalHeight; g.classList.remove('loading'); g.style.setProperty('--ar', ar); g.style.backgroundImage=`url(${j.url})`;
+      im.onload=()=>{ if(!c.isConnected || !$('shBody').contains(c)) return;  /* 已切走就不再改全局展示 */
+        const g=c.querySelector('.gimg'), ar=im.naturalWidth/im.naturalHeight; g.classList.remove('loading'); g.style.setProperty('--ar', ar); g.style.backgroundImage=`url(${j.url})`;
         g.querySelector('.gover').remove(); g.dataset.src=j.url; g.classList.add('reveal'); t.genImgs.push({url:j.url, ar});
         c.insertAdjacentHTML('beforeend', `<p class="gcap">生成用时 ${Math.round(j.secs||0)} 秒 · ${j.size||''} · ${im.naturalWidth}×${im.naturalHeight}</p>`);
         $('rImg').style.backgroundImage=$('rBg').style.backgroundImage=`url(${j.url})`; };
@@ -2377,11 +2435,13 @@ async function realTurn(tb, t, idx, gen){
     tx.innerHTML=`<div class="failbox" role="alert"><b>${why}</b><small>${esc((e.code?e.code+' ':'')+String(e.message||e).slice(0,160))}</small>${(e.code===401||e.code===403||e.code===402)?'':'<button class="pl" data-retry>重试</button>'}</div>`;
     const rb=tx.querySelector('[data-retry]');
     if(rb) rb.onclick=()=>{ if(S.busy || gen!==S.gen) return; S.busy=true; updatePanel(); realTurn(tb, t, idx, gen); };
+    t.status='error'; saveHist();
     S.busy=false; updatePanel(); return;
   }
   if(gen!==S.gen) return;
   const {answer,sugg}=splitAnswer(full);
-  t.answer=answer; t.sugg=sugg; t.r={text:answer, items:t.genImgs.map(g=>({img:g.url, ar:g.ar, title:'', gen:true})), sugg};
+  t.answer=answer; t.sugg=sugg; t.status='done'; t.r={text:answer, items:t.genImgs.map(g=>({img:g.url, ar:g.ar, title:'', gen:true})), sugg};
+  saveHist();
   tx.innerHTML=linkCites(fmt(answer), src);
   revealItems(tb, {text:answer, items:[], sugg}, 0, gen, null);
 }
