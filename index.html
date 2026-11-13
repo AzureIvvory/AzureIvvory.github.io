@@ -589,6 +589,9 @@ body.mob input,body.mob textarea{font-size:16px}
 .t-text .tt-gd1 .tt-gd-ph{width:34px;height:34px}
 .t-text .tt-gd1 .tt-gd-tx{padding:0}
 .t-text .tt-gd1 .tt-gd-buy{right:5px;bottom:5px;padding:2px 6px;font-size:10px}
+.t-text .tt-cmp{min-width:0;overflow:hidden}
+.t-text .tt-cmp-tx i{max-width:100%}
+.t-text .tt-cmpgrid .tt-cmp-tx{overflow:hidden}
 </style>
 
 <div class="stage">
@@ -718,7 +721,7 @@ body.mob input,body.mob textarea{font-size:16px}
           <b id="introT">视搜多轮多图 · 现场体验</b>
           <p>拍照或从相册选图，可上传多张图片 &amp; 连续追问，体验 AI 试穿、改图。</p>
           <p class="in-note">你的照片和问题会发送给第三方模型服务（DeepSeek、火山方舟）用于生成回答。请不要拍摄证件、隐私等敏感内容。</p>
-          <button id="introGo">开始体验</button><p class="in-build">build 2026-11-14.3</p></div></div>
+          <button id="introGo">开始体验</button><p class="in-build">build 2026-11-14.4</p></div></div>
         <div class="toast" id="toast"></div>
         <div class="homebar" id="homebar"></div>
       </div></div>
@@ -2000,10 +2003,12 @@ function cmpPhoto(kind, q){
 function cmpWrap(cards){
   const html = cards.map(cmpCard).filter(Boolean).join('');
   if (!html) return '';
+  /* 一张图鉴卡走整行（横排），两张以上才铺两列，否则半宽会把描述挤出去 */
   const allImg = cards.every(c => String(c.component) === 'Image');
+  const multiImg = allImg && cards.length > 1;
   const allGoods = cards.every(c => String(c.component) === 'Goods');
   const oneGoods = allGoods && cards.length === 1;
-  return '<div class="tt-cmpbox'+(allGoods?' tt-gdbox'+(oneGoods?' tt-gd1':''):(allImg?' tt-cmpgrid':''))+'">'+html+'</div>';
+  return '<div class="tt-cmpbox'+(allGoods?' tt-gdbox'+(oneGoods?' tt-gd1':''):(multiImg?' tt-cmpgrid':''))+'">'+html+'</div>';
 }
 function fmt(t){
   /* <FUNCTION> 是旧协议残留，模型偶尔会回退，这里兜底剥掉，绝不显示给用户 */
