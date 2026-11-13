@@ -561,8 +561,8 @@ body.mob input,body.mob textarea{font-size:16px}
 .gpct{font-size:11.5px;color:#A0A1A7;font-variant-numeric:tabular-nums;letter-spacing:.02em}
 /* ===== 商品卡 / 视频卡 ===== */
 .t-text .tt-gdbox{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.t-text .tt-gd{display:flex;flex-direction:column;gap:6px;text-decoration:none;color:inherit;border-radius:10px;overflow:hidden;background:#F7F8FA}
-.t-text .tt-gd-art{position:relative;display:flex;align-items:center;justify-content:center;width:100%;aspect-ratio:1/1;background:#F2F4F7}
+.t-text .tt-gd{display:flex;flex-direction:row;align-items:center;gap:10px;padding:8px;text-decoration:none;color:inherit;border-radius:10px;overflow:hidden;background:#F7F8FA}
+.t-text .tt-gd-art{position:relative;display:flex;align-items:center;justify-content:center;width:92px;height:92px;flex:none;border-radius:8px;background:#F2F4F7;background-size:cover;background-position:center}
 .t-text .tt-gd-ph{width:46px;height:46px;color:#C3C6CD}
 .t-text .tt-gd-buy{position:absolute;right:6px;bottom:6px;border:0;border-radius:6px;padding:3px 7px;font-size:10.5px;color:#fff;background:rgba(254,44,85,.94)}
 .t-text .tt-gd-tx{display:flex;flex-direction:column;gap:2px;padding:0 7px 7px}
@@ -583,12 +583,12 @@ body.mob input,body.mob textarea{font-size:16px}
 .crop-tip button:active{transform:scale(.96)}
 .t-text .tt-code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;padding:1px 4px;border-radius:4px;background:#F2F4F7;color:#3A3C45}
 .fail-note{margin:0;font-size:13px;color:#8A8B91}
-.t-text .tt-gdbox.tt-gd1{grid-template-columns:1fr}
-.t-text .tt-gd1 .tt-gd{flex-direction:row;align-items:center;gap:10px;padding:8px}
-.t-text .tt-gd1 .tt-gd-art{width:92px;height:92px;aspect-ratio:auto;flex:none;border-radius:8px}
-.t-text .tt-gd1 .tt-gd-ph{width:34px;height:34px}
-.t-text .tt-gd1 .tt-gd-tx{padding:0}
-.t-text .tt-gd1 .tt-gd-buy{right:5px;bottom:5px;padding:2px 6px;font-size:10px}
+.t-text .tt-gdbox.t-text .tt-gdbox.tt-gd1{grid-template-columns:1fr}
+.t-text .t-text .tt-gd1 .tt-gd{flex-direction:row;align-items:center;gap:10px;padding:8px}
+.t-text .t-text .tt-gd1 .tt-gd-art{width:92px;height:92px;aspect-ratio:auto;flex:none;border-radius:8px}
+.t-text .t-text .tt-gd1 .tt-gd-ph{width:34px;height:34px}
+.t-text .t-text .tt-gd1 .tt-gd-tx{padding:0}
+.t-text .t-text .tt-gd1 .tt-gd-buy{right:5px;bottom:5px;padding:2px 6px;font-size:10px}
 .t-text .tt-cmp{min-width:0;overflow:hidden}
 .t-text .tt-cmp-tx i{max-width:100%}
 .t-text .tt-cmpgrid .tt-cmp-tx{overflow:hidden}
@@ -721,7 +721,7 @@ body.mob input,body.mob textarea{font-size:16px}
           <b id="introT">视搜多轮多图 · 现场体验</b>
           <p>拍照或从相册选图，可上传多张图片 &amp; 连续追问，体验 AI 试穿、改图。</p>
           <p class="in-note">你的照片和问题会发送给第三方模型服务（DeepSeek、火山方舟）用于生成回答。请不要拍摄证件、隐私等敏感内容。</p>
-          <button id="introGo">开始体验</button><p class="in-build">build 2026-11-14.8</p></div></div>
+          <button id="introGo">开始体验</button><p class="in-build">build 2026-11-14.10</p></div></div>
         <div class="toast" id="toast"></div>
         <div class="homebar" id="homebar"></div>
       </div></div>
@@ -2018,7 +2018,7 @@ function cmpWrap(cards){
   /* 一张图鉴卡走整行（横排），两张以上才铺两列，否则半宽会把描述挤出去 */
   const allImg = cards.every(c => String(c.component) === 'Image');
   const multiImg = allImg && cards.length > 1;
-  const allGoods = cards.every(c => String(c.component) === 'Goods');
+  const allGoods = false;   /* 商品卡一律横排，不再走网格 */
   const oneGoods = allGoods && cards.length === 1;
   return '<div class="tt-cmpbox'+(allGoods?' tt-gdbox'+(oneGoods?' tt-gd1':''):(multiImg?' tt-cmpgrid':''))+'">'+html+'</div>';
 }
