@@ -722,7 +722,7 @@ body.mob input,body.mob textarea{font-size:16px}
           <b id="introT">视搜多轮多图 · 现场体验</b>
           <p>拍照或从相册选图，可上传多张图片 &amp; 连续追问，体验 AI 试穿、改图。</p>
           <p class="in-note">你的照片和问题会发送给第三方模型服务（DeepSeek、火山方舟）用于生成回答。请不要拍摄证件、隐私等敏感内容。</p>
-          <button id="introGo">开始体验</button><p class="in-build">build 2026-11-14.19</p></div></div>
+          <button id="introGo">开始体验</button><p class="in-build">build 2026-11-14.20</p></div></div>
         <div class="toast" id="toast"></div>
         <div class="homebar" id="homebar"></div>
       </div></div>
@@ -1258,8 +1258,19 @@ const ENG = (() => {
         const tm = { role: 'tool', tool_call_id: c.id, content: result }; msgs.push(tm); chain.push(tm);
       }
     }
-    /* 一轮正文都没拿到（模型只调了工具、或什么都没说）→ 如实标成未完成 */
-    if (!lastText.trim()) emit({ type: 'empty' });
+    /* 工具轮把 3 次机会用完了、或模型只说工具不写正文：
+       再给一次「不递工具、只写回答」的机会，不能就这么结束 */
+    if (!lastText.trim()) {
+      emit({ type: 'round', n: MAX_TOOL_ROUNDS + 1 });
+      const res = await openChat(msgs, null, think, signal);
+      lastText = '';
+      const [ans, fin] = await streamChat(res, (kind, text) => {
+        if (kind === 'reasoning') { emit({ type: 'reasoning', text }); return; }
+        lastText += text; emit({ type: 'delta', text });
+      }, signal);
+      finish = fin;
+      if (lastText.trim()) { msgs.push(ans); chain.push(ans); } else emit({ type: 'empty' });
+    }
     if (finish === 'length') emit({ type: 'notice', text: '回答达到长度上限被截断' });
     emit({ type: 'messages', messages: chain, next_cite: n });
   }
