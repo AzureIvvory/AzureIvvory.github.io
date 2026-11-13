@@ -1,7 +1,8 @@
 <!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
-<meta http-equiv="Expires" content="0"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><link rel="stylesheet" href="./katex/katex.min.css">
+<meta http-equiv="Expires" content="0"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}.in-build{margin:10px 0 0;text-align:center;font-size:10.5px;color:#C2C4CB;letter-spacing:.02em}
+</style><link rel="stylesheet" href="./katex/katex.min.css">
 <script src="./katex/katex.min.js" defer></script>
 </head><body>
 <title>视搜多轮多图</title>
@@ -717,7 +718,7 @@ body.mob input,body.mob textarea{font-size:16px}
           <b id="introT">视搜多轮多图 · 现场体验</b>
           <p>拍照或从相册选图，可上传多张图片 &amp; 连续追问，体验 AI 试穿、改图。</p>
           <p class="in-note">你的照片和问题会发送给第三方模型服务（DeepSeek、火山方舟）用于生成回答。请不要拍摄证件、隐私等敏感内容。</p>
-          <button id="introGo">开始体验</button></div></div>
+          <button id="introGo">开始体验</button><p class="in-build">build 2026-11-13.2</p></div></div>
         <div class="toast" id="toast"></div>
         <div class="homebar" id="homebar"></div>
       </div></div>
@@ -1435,7 +1436,8 @@ async function dbDel(id){
   return new Promise((res,rej)=>{ const tx=db.transaction('sessions','readwrite'); tx.objectStore('sessions').delete(id); tx.oncomplete=()=>res(true); tx.onerror=()=>rej(tx.error); });
 }
 /* 内容指纹：轮次与回答都一样的两条记录，就是同一段对话 */
-const histSig = ts => (ts||[]).map(t=>`${t.q||''}\u0001${t.answer||''}`).join('\u0002');
+/* 同一次对话的判据：第一轮的问题 + 图片。后续轮数不同、回答状态不同，都算同一条 */
+const histSig = ts => { const a=ts||[]; const f=a[0]||{}; return (f.q||'')+'\u0001'+((f.imgs||[]).join(',')); };
 const thumbOf=(h,id)=> (h && h.images && h.images[id]) || (IMG[id] && (IMG[id].t||IMG[id].hi)) || '';
 function histTitle(h){ const t=h.turns; return (t.find(x=>x.q)||{}).q || '图片提问'; }
 function renderHist(newFirst){
@@ -1461,10 +1463,16 @@ async function saveHist(){
   const mySig=histSig(turns);
   try{
     for(const old of await dbAll()){
-      if(old.id!==rec.id && histSig(old.turns)===mySig){ try{ await dbDel(old.id); }catch(_){} }
+      if(old.id===rec.id || histSig(old.turns)!==mySig) continue;
+      /* 轮次多的那份为准，另一份删掉 */
+      if((old.turns||[]).length > turns.length) { try{ await dbDel(rec.id); }catch(_){} return false; }
+      try{ await dbDel(old.id); }catch(_){}
     }
   }catch(_){}
-  for(let k=HIST.length-1;k>=0;k--){ const h=HIST[k]; if(h.turns && h.id!==rec.id && histSig(h.turns)===mySig) HIST.splice(k,1); }
+  for(let k=HIST.length-1;k>=0;k--){
+    const h=HIST[k];
+    if(h.turns && h.id!==rec.id && histSig(h.turns)===mySig && (h.turns||[]).length<=turns.length) HIST.splice(k,1);
+  }
   const i=HIST.findIndex(h=>h.id===S.sid);
   if(i>=0) HIST[i]=rec; else HIST.unshift(rec);
   if(HIST.length>HIST_MAX) HIST.length=HIST_MAX;
@@ -1496,12 +1504,13 @@ $('histList').addEventListener('click', e=>{ const b=e.target.closest('[data-h]'
 (function bootHist(){
   dbAll().then(all=>{
     if(!all.length){ HIST.push(...HIST_SEED); renderHist(); return; }
-    const seen=new Set(), keep=[];
-    all.sort((a,b)=>b.updatedAt-a.updatedAt).forEach(r=>{
-      const sig=histSig(r.turns);
-      if(seen.has(sig)){ try{ dbDel(r.id); }catch(_){} return; }
-      seen.add(sig); keep.push(r);
+    const best=new Map();
+    all.forEach(r=>{
+      const sig=histSig(r.turns), n=(r.turns||[]).length;
+      const cur=best.get(sig);
+      if(!cur || n>cur.n || (n===cur.n && r.updatedAt>cur.r.updatedAt)) best.set(sig,{r,n});
     });
+    const keep=[...best.values()].map(x=>x.r).sort((a,b)=>b.updatedAt-a.updatedAt);
     keep.slice(0,HIST_MAX).forEach(r=>HIST.push(r));
     renderHist();
   }).catch(()=>{ HIST.push(...HIST_SEED); renderHist(); });
