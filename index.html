@@ -1,7 +1,7 @@
 <!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><link rel="stylesheet" href="./katex/katex.min.css">
 <script src="./katex/katex.min.js" defer></script>
 </head><body>
-<title>拍照问</title>
+<title>视搜多轮多图</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <style>
 /* Layout: presenter stage — phone prototype on the left, flow map + shortcuts on the right; stacks on narrow screens */
@@ -620,7 +620,7 @@ body.mob input,body.mob textarea{font-size:16px}
             <button class="pl shutter" id="shutter" aria-label="拍照"><i></i></button>
             <button class="pl side" id="camAlbum"><span class="alb" id="camAlbThumb"></span><span>相册</span></button>
           </div>
-          <div class="cam-tabs" id="camTabs"><span>扫一扫</span><b>拍照问</b><span>视频问</span></div>
+          <div class="cam-tabs" id="camTabs"><span>扫一扫</span><b>多图视搜</b><span>视频问</span></div>
           <div class="cam-strip" id="camStrip"><button class="pl cs-handle" id="csHandle" aria-label="打开相册"><i></i></button><div class="cs-row" id="csRow"></div></div>
           <div class="flash" id="flash"></div>
         </section>
@@ -705,9 +705,9 @@ body.mob input,body.mob textarea{font-size:16px}
         <div class="drop" id="drop" hidden><svg class="ic" viewBox="0 0 24 24"><path d="M12 15V4M7 9l5-5 5 5"/><path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg>松手上传图片</div>
         <input type="file" id="picIn" accept="image/*" multiple hidden>
         <div class="intro" id="intro" hidden><div class="in-card" role="dialog" aria-labelledby="introT">
-          <b id="introT">拍照问 · 现场体验</b>
-          <p>拍一张照片，或从相册选图，直接向 AI 提问，可以连续追问，也可以让它帮你试穿、改图。</p>
-          <p class="in-note">你的照片和问题会发送给第三方模型服务（DeepSeek、火山方舟）用于生成回答。请不要拍摄证件、他人隐私等敏感内容。</p>
+          <b id="introT">视搜多轮多图 · 现场体验</b>
+          <p>拍张照片，或从相册选图，连着追问它都接得住——试试让它帮你试穿、改图、找同款。</p>
+          <p class="in-note">你的照片和问题会发送给第三方模型服务（DeepSeek、火山方舟）用于生成回答。请不要拍摄证件、隐私等敏感内容。</p>
           <button id="introGo">开始体验</button></div></div>
         <div class="toast" id="toast"></div>
         <div class="homebar" id="homebar"></div>
