@@ -549,7 +549,8 @@ body.mob input,body.mob textarea{font-size:16px}
 .t-text .tt-cmp-go{margin-left:auto;color:#C2C4CB;font-size:15px;flex:none}
 .t-text .tt-cmpgrid .tt-cmp{flex-direction:column;align-items:flex-start;gap:7px;padding:9px;height:100%}
 .t-text .tt-cmp:hover{background:#F2F4F8;border-color:#E4E6EB}
-.t-text .tt-cmp-art{width:38px;height:38px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#2F6BFF;background:#E9F0FF}
+.t-text .tt-cmp-art{flex:none;width:38px;height:38px;border-radius:9px;display:flex;align-items:center;justify-content:center;background:#F0F2F5;color:#C3C6CD}
+.t-text .tt-cmp-art svg{width:20px;height:20px}
 .t-text .tt-cmpgrid .tt-cmp-tx{width:100%}
 
 /* ===== 生图等待：流光文字 + 百分比，无进度条 ===== */
@@ -721,7 +722,7 @@ body.mob input,body.mob textarea{font-size:16px}
           <b id="introT">视搜多轮多图 · 现场体验</b>
           <p>拍照或从相册选图，可上传多张图片 &amp; 连续追问，体验 AI 试穿、改图。</p>
           <p class="in-note">你的照片和问题会发送给第三方模型服务（DeepSeek、火山方舟）用于生成回答。请不要拍摄证件、隐私等敏感内容。</p>
-          <button id="introGo">开始体验</button><p class="in-build">build 2026-11-14.13</p></div></div>
+          <button id="introGo">开始体验</button><p class="in-build">build 2026-11-14.14</p></div></div>
         <div class="toast" id="toast"></div>
         <div class="homebar" id="homebar"></div>
       </div></div>
@@ -1958,7 +1959,8 @@ function cmpCard(c){
     const ent = String(p.entity || '').trim();
     if (!ent) return '';
     return cmpLink(cmpSearch(ent),
-      '<span class="tt-cmp-art">'+fmtEsc(ent.slice(0,1))+'</span>'+
+      '<span class="tt-cmp-art"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+
+        '<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="M20.5 16l-5-5-8.5 8.5"/></svg></span>'+
       '<span class="tt-cmp-tx"><b>'+fmtEsc(ent)+'</b>'+
       (p.description ? '<i>'+fmtEsc(p.description)+'</i>' : '')+'</span>');
   }
