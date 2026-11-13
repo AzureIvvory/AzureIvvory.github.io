@@ -721,7 +721,7 @@ body.mob input,body.mob textarea{font-size:16px}
           <b id="introT">视搜多轮多图 · 现场体验</b>
           <p>拍照或从相册选图，可上传多张图片 &amp; 连续追问，体验 AI 试穿、改图。</p>
           <p class="in-note">你的照片和问题会发送给第三方模型服务（DeepSeek、火山方舟）用于生成回答。请不要拍摄证件、隐私等敏感内容。</p>
-          <button id="introGo">开始体验</button><p class="in-build">build 2026-11-14.6</p></div></div>
+          <button id="introGo">开始体验</button><p class="in-build">build 2026-11-14.7</p></div></div>
         <div class="toast" id="toast"></div>
         <div class="homebar" id="homebar"></div>
       </div></div>
@@ -1322,11 +1322,11 @@ const IMG = {
   cliff:{t:A.cliff,label:'海边白崖',kind:'other',desc:'海边白色断崖和绿色草坡，一辆橙色露营车停在草地上，很有公路旅行的感觉。'},
   stripe:{t:A.shot_stripe,p:A.prod_stripe,label:'米白竖条纹飘带衬衫',kind:'garment',shot:true,price:239},
   blue:{t:A.shot_blue,p:A.prod_blue,label:'浅蓝竖条纹飘带衬衫',kind:'garment',shot:true,price:239},
-  cafe:{t:A.selfie_t,hi:A.selfie_hi,label:'你的自拍',kind:'person',self:true},
+  cafe:{t:A.soft,hi:A.soft,label:'你的自拍',kind:'person',self:true},
   bluecam:{t:A.bluecam_t,hi:A.bluecam_hi,label:'浅蓝竖条纹飘带衬衫',kind:'garment',price:239,goods:'blue'}
 };
 // 链路3：相册正序，最新在最前
-const ALBUM = ['stripe','blue','cafe','cliff','cloud','soft','selfie','bull','pine','juice','rocks','tree','toy'];
+const ALBUM = ['stripe','blue','cliff','cloud','soft','pine','rocks','tree','toy'];
 const GOODS = {
   sweater:{label:'毛衣',chips:['全部','围脖','羊毛衣','开衫','高领'],items:[
     {img:()=>A.p_g1,t:'2026新款一线成衣无缝圆领羊毛衫 慵懒软糯',p:139,s:'已售8000+',shop:'梵西FONCE'},
@@ -2327,7 +2327,7 @@ function ensureSid(id){
   return m.reg;
 }
 /* 示例图：samples/ 里有同名高清图（cafe.jpg 等）就替换内置的旧缩略图 */
-const SAMPLE_IDS=['cafe','selfie','soft','juice','toy','tree','rocks','pine','bull','cloud','cliff'];
+const SAMPLE_IDS=['soft','toy','tree','rocks','pine','cloud','cliff'];
 async function loadSamples(){
   try{
     const j=await (await ENG.api('/api/samples')).json(), m=j.samples||{}; let n=0;
