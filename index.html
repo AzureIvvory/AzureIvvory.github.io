@@ -718,7 +718,7 @@ body.mob input,body.mob textarea{font-size:16px}
           <b id="introT">视搜多轮多图 · 现场体验</b>
           <p>拍照或从相册选图，可上传多张图片 &amp; 连续追问，体验 AI 试穿、改图。</p>
           <p class="in-note">你的照片和问题会发送给第三方模型服务（DeepSeek、火山方舟）用于生成回答。请不要拍摄证件、隐私等敏感内容。</p>
-          <button id="introGo">开始体验</button><p class="in-build">build 2026-11-13.5</p></div></div>
+          <button id="introGo">开始体验</button><p class="in-build">build 2026-11-13.6</p></div></div>
         <div class="toast" id="toast"></div>
         <div class="homebar" id="homebar"></div>
       </div></div>
@@ -1198,19 +1198,41 @@ const ENG = (() => {
     const tools = (o.search ? TOOLS : []).concat(o.gen && CFG.ark ? [GEN_TOOL] : []);
     const size = GEN_SIZES.includes(o.size) ? o.size : CFG.size, chain = [], genCount = { n: 0 };
     let n = 1;
-    for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
+    /* 两阶段：工具轮的正文一律丢弃（那是模型的计划）。只有真的调用过工具，才单独
+       再请求一次「回答阶段」；没调用工具的那一轮，缓冲区里就是最终答案，直接放出来，
+       不为普通问答多打一次请求。 */
+    const TOOL_PHASE = '当前处于工具阶段，输出不会展示给用户。只选择并调用必要的工具，不要撰写最终答案、意图确认或任何解释。';
+    const ANSWER_PHASE = '当前处于最终回答阶段，工具调用已结束，此阶段没有可用工具。直接输出用户可见的最终答案，不要提及工具、计划、参数或过程。';
+    const withPhase = (list, extra) => {
+      const out = list.slice();
+      if (out[0] && out[0].role === 'system') out[0] = Object.assign({}, out[0], { content: out[0].content + '\n\n' + extra });
+      else out.unshift({ role: 'system', content: extra });
+      return out;
+    };
+    let usedTool = false, pend = '', finish = null;
+    for (let round = 0; round < MAX_TOOL_ROUNDS && tools.length; round++) {
       emit({ type: 'round', n: round + 1 });
-      const res = await openChat(msgs, round < MAX_TOOL_ROUNDS ? tools : null, think, signal);
-      const [msg, finish] = await streamChat(res, (kind, text) => emit({ type: kind === 'text' ? 'delta' : 'reasoning', text }), signal);
-      if (finish === 'length') emit({ type: 'notice', text: '回答达到长度上限被截断' });
+      const res = await openChat(withPhase(msgs, TOOL_PHASE), tools, think, signal);
+      pend = '';
+      const [msg] = await streamChat(res, (kind, text) => { if (kind === 'reasoning') emit({ type: 'reasoning', text }); else pend += text; }, signal);
       msgs.push(msg); chain.push(msg);
-      if (!msg.tool_calls) break;
+      if (!msg.tool_calls || !msg.tool_calls.length) break;
+      usedTool = true; pend = '';
       for (const c of msg.tool_calls) {
         const [result, used] = await runTool(c, o.question || '', n, emit, reg, turn, genCount, size, signal);
         n += used;
         const tm = { role: 'tool', tool_call_id: c.id, content: result }; msgs.push(tm); chain.push(tm);
       }
     }
+    if (!tools.length || usedTool) {
+      const res = await openChat(withPhase(msgs, ANSWER_PHASE), null, think, signal);
+      const [ans, fin] = await streamChat(res, (kind, text) => emit({ type: kind === 'text' ? 'delta' : 'reasoning', text }), signal);
+      finish = fin; chain.push(ans);
+    } else if (pend) {
+      emit({ type: 'delta', text: pend });
+      chain.push({ role: 'assistant', content: pend });
+    }
+    if (finish === 'length') emit({ type: 'notice', text: '回答达到长度上限被截断' });
     emit({ type: 'messages', messages: chain, next_cite: n });
   }
 
