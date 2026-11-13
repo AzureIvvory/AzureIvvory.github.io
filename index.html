@@ -1430,6 +1430,12 @@ async function dbAll(){
   return new Promise((res,rej)=>{ const out=[]; const tx=db.transaction('sessions','readonly'); const q=tx.objectStore('sessions').openCursor();
     q.onsuccess=()=>{ const c=q.result; if(c){ out.push(c.value); c.continue(); } else res(out); }; q.onerror=()=>rej(q.error); });
 }
+async function dbDel(id){
+  const db=await pzwDB();
+  return new Promise((res,rej)=>{ const tx=db.transaction('sessions','readwrite'); tx.objectStore('sessions').delete(id); tx.oncomplete=()=>res(true); tx.onerror=()=>rej(tx.error); });
+}
+/* 内容指纹：轮次与回答都一样的两条记录，就是同一段对话 */
+const histSig = ts => (ts||[]).map(t=>`${t.q||''}\u0001${t.answer||''}`).join('\u0002');
 const thumbOf=(h,id)=> (h && h.images && h.images[id]) || (IMG[id] && (IMG[id].t||IMG[id].hi)) || '';
 function histTitle(h){ const t=h.turns; return (t.find(x=>x.q)||{}).q || '图片提问'; }
 function renderHist(newFirst){
@@ -1451,6 +1457,14 @@ async function saveHist(){
   for(const id of new Set(turns.flatMap(t=>t.imgs))){ const src=(IMG[id]&&(IMG[id].hi||IMG[id].t))||''; if(src) images[id]=src; }
   const rec={ id:S.sid, title:histTitle({turns}), updatedAt:Date.now(), turns, images };
   try{ await dbPut(rec); }catch(_){ /* 存不下就只在内存里 */ }
+  /* 同一段对话如果因为 sid 变化存成了多条，这里合并掉 */
+  const mySig=histSig(turns);
+  try{
+    for(const old of await dbAll()){
+      if(old.id!==rec.id && histSig(old.turns)===mySig){ try{ await dbDel(old.id); }catch(_){} }
+    }
+  }catch(_){}
+  for(let k=HIST.length-1;k>=0;k--){ const h=HIST[k]; if(h.turns && h.id!==rec.id && histSig(h.turns)===mySig) HIST.splice(k,1); }
   const i=HIST.findIndex(h=>h.id===S.sid);
   if(i>=0) HIST[i]=rec; else HIST.unshift(rec);
   if(HIST.length>HIST_MAX) HIST.length=HIST_MAX;
@@ -1482,7 +1496,13 @@ $('histList').addEventListener('click', e=>{ const b=e.target.closest('[data-h]'
 (function bootHist(){
   dbAll().then(all=>{
     if(!all.length){ HIST.push(...HIST_SEED); renderHist(); return; }
-    all.sort((a,b)=>b.updatedAt-a.updatedAt).slice(0,HIST_MAX).forEach(r=>HIST.push(r));
+    const seen=new Set(), keep=[];
+    all.sort((a,b)=>b.updatedAt-a.updatedAt).forEach(r=>{
+      const sig=histSig(r.turns);
+      if(seen.has(sig)){ try{ dbDel(r.id); }catch(_){} return; }
+      seen.add(sig); keep.push(r);
+    });
+    keep.slice(0,HIST_MAX).forEach(r=>HIST.push(r));
     renderHist();
   }).catch(()=>{ HIST.push(...HIST_SEED); renderHist(); });
 })();
