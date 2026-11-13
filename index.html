@@ -718,7 +718,7 @@ body.mob input,body.mob textarea{font-size:16px}
           <b id="introT">视搜多轮多图 · 现场体验</b>
           <p>拍照或从相册选图，可上传多张图片 &amp; 连续追问，体验 AI 试穿、改图。</p>
           <p class="in-note">你的照片和问题会发送给第三方模型服务（DeepSeek、火山方舟）用于生成回答。请不要拍摄证件、隐私等敏感内容。</p>
-          <button id="introGo">开始体验</button><p class="in-build">build 2026-11-13.2</p></div></div>
+          <button id="introGo">开始体验</button><p class="in-build">build 2026-11-13.3</p></div></div>
         <div class="toast" id="toast"></div>
         <div class="homebar" id="homebar"></div>
       </div></div>
@@ -1437,7 +1437,9 @@ async function dbDel(id){
 }
 /* 内容指纹：轮次与回答都一样的两条记录，就是同一段对话 */
 /* 同一次对话的判据：第一轮的问题 + 图片。后续轮数不同、回答状态不同，都算同一条 */
-const histSig = ts => { const a=ts||[]; const f=a[0]||{}; return (f.q||'')+'\u0001'+((f.imgs||[]).join(',')); };
+/* 同一次对话的判据：第一轮的问题 + 图片数量。
+   不能带图片 id —— 恢复会话时 id 会重新分配，指纹一变就判不出重复了 */
+const histSig = ts => { const f=(ts||[])[0]||{}; return (f.q||'')+'\u0001'+((f.imgs||[]).length); };
 const thumbOf=(h,id)=> (h && h.images && h.images[id]) || (IMG[id] && (IMG[id].t||IMG[id].hi)) || '';
 function histTitle(h){ const t=h.turns; return (t.find(x=>x.q)||{}).q || '图片提问'; }
 function renderHist(newFirst){
