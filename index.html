@@ -721,7 +721,7 @@ body.mob input,body.mob textarea{font-size:16px}
           <b id="introT">视搜多轮多图 · 现场体验</b>
           <p>拍照或从相册选图，可上传多张图片 &amp; 连续追问，体验 AI 试穿、改图。</p>
           <p class="in-note">你的照片和问题会发送给第三方模型服务（DeepSeek、火山方舟）用于生成回答。请不要拍摄证件、隐私等敏感内容。</p>
-          <button id="introGo">开始体验</button><p class="in-build">build 2026-11-14.5</p></div></div>
+          <button id="introGo">开始体验</button><p class="in-build">build 2026-11-14.6</p></div></div>
         <div class="toast" id="toast"></div>
         <div class="homebar" id="homebar"></div>
       </div></div>
@@ -1109,6 +1109,16 @@ const ENG = (() => {
       }
     }
   }
+  /* 流式读取的超时：首包 30s，之后每帧之间最多空闲 30s。
+     原来的超时只管到“收到响应头”，流卡住不关就会一直等下去。 */
+  const FIRST_TOKEN_MS = 30000, IDLE_MS = 30000;
+  function readStep(rd) {
+    let timer = null;
+    const guard = new Promise((_, rej) => {
+      timer = setTimeout(() => rej(new ApiError(0, '回答超时，请重试')), rd.__idle || FIRST_TOKEN_MS);
+    });
+    return Promise.race([rd.read(), guard]).finally(() => { clearTimeout(timer); rd.__idle = IDLE_MS; });
+  }
   async function streamChat(res, on, signal) {
     const acc = new ToolCallAcc(), rd = res.body.getReader(), dec = new TextDecoder();
     let content = '', reasoning = '', finish = null, buf = '';
@@ -1128,7 +1138,7 @@ const ENG = (() => {
     try {
       for (;;) {
         let step;
-        try { step = await rd.read(); } catch (e) { if (signal && signal.aborted) throw abortErr(); const er = new ApiError(0, '网络中断，回答没有收完'); er.net = true; throw er; }
+        try { step = await readStep(rd); } catch (e) { if (signal && signal.aborted) throw abortErr(); const er = new ApiError(0, '网络中断，回答没有收完'); er.net = true; throw er; }
         if (step.done) break;
         buf += dec.decode(step.value, { stream: true });
         let k; while ((k = buf.indexOf('\n')) >= 0) { const l = buf.slice(0, k); buf = buf.slice(k + 1); line(l); }
@@ -1217,7 +1227,7 @@ const ENG = (() => {
     const turn = messages.filter(m => m.role === 'user').length;
     const ctx = contextBlock(messages, reg);
     if (ctx) { if (msgs[0] && msgs[0].role === 'system') msgs[0] = Object.assign({}, msgs[0], { content: msgs[0].content + '\n\n' + ctx }); else msgs.unshift({ role: 'system', content: ctx }); }
-    const tools = (o.search ? TOOLS : []).concat(o.gen && CFG.ark ? [GEN_TOOL] : []);
+    const tools = o.textOnly ? [] : (o.search ? TOOLS : []).concat(o.gen && CFG.ark ? [GEN_TOOL] : []);
     const size = GEN_SIZES.includes(o.size) ? o.size : CFG.size, chain = [], genCount = { n: 0 };
     let n = 1;
     /* 两阶段：工具轮的正文一律丢弃（那是模型的计划）。只有真的调用过工具，才单独
@@ -1249,7 +1259,9 @@ const ENG = (() => {
     /* 工具阶段按 SP 要求不写最终答案，所以回答阶段总要执行一次 */
     const res = await openChat(withPhase(msgs, ANSWER_PHASE), null, think, signal);
     const [ans, fin] = await streamChat(res, (kind, text) => emit({ type: kind === 'text' ? 'delta' : 'reasoning', text }), signal);
-    finish = fin; chain.push(ans);
+    finish = fin;
+    const plain = String((ans && ans.content) || '').trim();
+    if (plain) chain.push(ans); else emit({ type: 'empty' });   /* 图片可能已经生成，正文却是空的 */
     if (finish === 'length') emit({ type: 'notice', text: '回答达到长度上限被截断' });
     emit({ type: 'messages', messages: chain, next_cite: n });
   }
@@ -1260,7 +1272,7 @@ const ENG = (() => {
   function chatResponse(body, signal) {
     const q = [], enc = new TextEncoder(); let wake = null, closed = false;
     const emit = o => { q.push(enc.encode('data: ' + JSON.stringify(o) + '\n\n')); if (wake) wake(); };
-    runTurn(body.messages || [], { search: !!body.search, question: body.question || '', think: body.thinking || {}, gen: !!body.image_gen, size: body.gen_size, signal }, emit)
+    runTurn(body.messages || [], { search: !!body.search, question: body.question || '', think: body.thinking || {}, gen: !!body.image_gen, textOnly: !!body.text_only, size: body.gen_size, signal }, emit)
       .then(() => emit({ type: 'done' }), e => { if (e.name !== 'AbortError') emit({ type: 'error', message: String(e.message || e), code: e.code || 0, net: !!e.net }); })
       .then(() => { closed = true; if (wake) wake(); });
     const reader = { async read() { while (!q.length && !closed) await new Promise(r => { wake = r; }); wake = null; return q.length ? { value: q.shift(), done: false } : { value: undefined, done: true }; } };
@@ -2430,7 +2442,7 @@ async function realTurn(tb, t, idx, gen){
   tb.innerHTML='<div class="think" hidden><svg viewBox="0 0 24 24"><path d="M12 2l2.2 7.8L22 12l-7.8 2.2L12 22l-2.2-7.8L2 12l7.8-2.2z"/></svg><span>深度思考中</span></div><div class="tools"></div><div class="t-text"><div class="skel"><i style="width:92%"></i><i style="width:78%"></i><i style="width:60%"></i></div></div><div class="gens"></div>';
   t.genImgs=[];
   const think=tb.children[0], thinkTxt=think.lastChild, tools=tb.children[1], tx=tb.children[2], gens=tb.children[3], body=$('shBody');
-  let full='';
+  let full='', emptyHit=false;
   const src={}, pills={}, gcards={}, SR={run:0, ok:0};
   const pill=(key, cls, text)=>{ let el=pills[key]; if(!el){ el=document.createElement('div'); tools.appendChild(el); pills[key]=el; } el.className='tool '+cls; el.textContent=text; };
   // 深度思考：不显示思考内容，只显示动效提示和用时
@@ -2475,7 +2487,7 @@ async function realTurn(tb, t, idx, gen){
     const messages=await buildMessages(idx);
     if(gen!==S.gen) return;
     const res=await ENG.api('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},signal:ctrl.signal,
-      body:JSON.stringify({messages, search:$('webSearch').checked, question:t.q||'', thinking:thinkCfg(), image_gen:genActive(), gen_size:$('genSize').value})});
+      body:JSON.stringify({messages, search:$('webSearch').checked, question:t.q||'', thinking:thinkCfg(), image_gen:genActive(), text_only:!!t.textOnly, gen_size:$('genSize').value})});
     if(!res.ok){ let m=await res.text(); try{const j=JSON.parse(m); m=(j.error&&(j.error.message||j.error))||m;}catch(_){} throw new Error(`${res.status} ${m}`); }
     const rd=res.body.getReader(), dec=new TextDecoder(); let buf='', finished=false;
     while(!finished){
@@ -2508,6 +2520,7 @@ async function realTurn(tb, t, idx, gen){
             },16);
           } else { full+=chunk; tx.innerHTML=fmtPartial(visiblePart(full)); }
         }
+        else if(j.type==='empty'){ emptyHit=true; }
         else if(j.type==='messages'){ t.chain=j.messages||[]; }
         else if(j.type==='notice') pill('n:'+j.text,'bad',j.text);
         else if(j.type==='search' || j.type==='fetch'){
@@ -2539,6 +2552,14 @@ async function realTurn(tb, t, idx, gen){
   }
   if(gen!==S.gen) return;
   clearInterval(tx._type); tx._type=null;
+  if(emptyHit && !full.trim()){
+    /* 图片可能在，但正文是空的：如实标成未完成，保留图片，给一个只重试文字的入口 */
+    t.status='incomplete'; t.answer=null;
+    tx.innerHTML=`<div class="failbox" role="alert"><b>这次没有生成文字</b><small>图片保留着，可以只重试文字</small><button class="pl" data-text-retry="1">只重试文字</button></div>`;
+    const rb=tx.querySelector('[data-text-retry]');
+    if(rb) rb.onclick=()=>{ if(S.busy||gen!==S.gen) return; t.textOnly=true; S.busy=true; updatePanel(); realTurn(tb,t,idx,gen); };
+    saveHist(); S.busy=false; updatePanel(); return;
+  }
   const {answer,sugg}=splitAnswer(full);
   t.answer=answer; t.sugg=sugg; t.status='done'; t.r={text:answer, items:t.genImgs.map(g=>({img:g.url, ar:g.ar, title:'', gen:true})), sugg};
   saveHist();
