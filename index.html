@@ -718,7 +718,7 @@ body.mob input,body.mob textarea{font-size:16px}
           <b id="introT">视搜多轮多图 · 现场体验</b>
           <p>拍照或从相册选图，可上传多张图片 &amp; 连续追问，体验 AI 试穿、改图。</p>
           <p class="in-note">你的照片和问题会发送给第三方模型服务（DeepSeek、火山方舟）用于生成回答。请不要拍摄证件、隐私等敏感内容。</p>
-          <button id="introGo">开始体验</button><p class="in-build">build 2026-11-14.1</p></div></div>
+          <button id="introGo">开始体验</button><p class="in-build">build 2026-11-14.2</p></div></div>
         <div class="toast" id="toast"></div>
         <div class="homebar" id="homebar"></div>
       </div></div>
@@ -1159,10 +1159,24 @@ const ENG = (() => {
       return JSON.stringify(out);
     } catch (e) {
       if (e.name === 'AbortError') throw e;
-      const busy = e.code === 429;
-      emit({ type: 'image', status: 'fail', key: callId, message: busy ? '现在生图的人比较多，稍后再试' : errText(e) });
-      return `生图失败：${busy ? '同时生图的人太多' : errText(e)}。请如实告诉用户这次没有生成成功，可以稍后再试。`;
+      const f = genFail(e);
+      emit({ type: 'image', status: 'fail', key: callId, message: f.ui });
+      /* 给模型的是同一句人话，并明确不要转述技术细节 */
+      return `生图失败：${f.model}。不要向用户提起错误码、request id 或英文原文，用一句话告诉用户可以换一张再试。`;
     }
+  }
+  /* 生图失败：接口原文（含 request id、英文、错误码）不能给用户看，翻成人话 */
+  function genFail(e) {
+    const raw = String((e && e.message) || e || '');
+    try { console.warn('[gen]', raw); } catch (_) {}
+    const lo = raw.toLowerCase();
+    if (/copyright|版权/.test(lo)) return { ui: '这张图涉及版权限制，换一张试试', model: '这张图涉及版权限制，建议换一张图' };
+    if (/sensitive|risk|police|policy|审核|违规|inappropriate/.test(lo)) return { ui: '这张图没有通过内容审核，换一张试试', model: '这张图没有通过内容审核，建议换一张' };
+    if (/401|403|unauthor|forbidden|api key/.test(lo)) return { ui: '生图服务暂时不可用', model: '生图服务未授权' };
+    if (/429|rate|too many|限流/.test(lo)) return { ui: '现在生图的人比较多，稍后再试', model: '同时生图的人太多' };
+    if (/timeout|timed out|etimedout|network|fetch/.test(lo)) return { ui: '网络不太稳定，没连上，再试一次', model: '网络不稳定' };
+    if (/5\d\d|server|internal|unavailable/.test(lo)) return { ui: '生图服务暂时不可用，稍后再试', model: '生图服务暂时不可用' };
+    return { ui: '这张图没生成成功，换一张再试', model: '这次没有生成成功' };
   }
   async function runTool(call_, question, n, emit, reg, turn, genCount, size, signal) {
     const name = call_.function.name, args = parseArgs(call_.function.arguments);
@@ -2520,7 +2534,8 @@ async function realTurn(tb, t, idx, gen){
     const why = e.code===429 ? '现在体验的人比较多，稍等几秒再试' : (e.code===401||e.code===403) ? '体验链接已失效，请找现场工作人员' : e.code===402 ? '体验额度已用完，请找现场工作人员'
       : e.net ? '网络不太稳定，没有连上' : '这次没有答出来';
     tools.innerHTML=''; gens.innerHTML=''; think.hidden=true;
-    tx.innerHTML=`<div class="failbox" role="alert"><b>${why}</b><small>${esc((e.code?e.code+' ':'')+String(e.message||e).slice(0,160))}</small>${(e.code===401||e.code===403||e.code===402)?'':'<button class="pl" data-retry>重试</button>'}</div>`;
+    try { console.warn('[chat]', e && (e.code ? e.code + ' ' : ''), e && e.message); } catch (_) {}
+    tx.innerHTML=`<div class="failbox" role="alert"><b>${why}</b><small>换一张图，或稍后再试一次</small>${(e.code===401||e.code===403||e.code===402)?'':'<button class="pl" data-retry>重试</button>'}</div>`;
     const rb=tx.querySelector('[data-retry]');
     if(rb) rb.onclick=()=>{ if(S.busy || gen!==S.gen) return; S.busy=true; updatePanel(); realTurn(tb, t, idx, gen); };
     t.status='error'; saveHist();
