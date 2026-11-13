@@ -721,7 +721,7 @@ body.mob input,body.mob textarea{font-size:16px}
           <b id="introT">视搜多轮多图 · 现场体验</b>
           <p>拍照或从相册选图，可上传多张图片 &amp; 连续追问，体验 AI 试穿、改图。</p>
           <p class="in-note">你的照片和问题会发送给第三方模型服务（DeepSeek、火山方舟）用于生成回答。请不要拍摄证件、隐私等敏感内容。</p>
-          <button id="introGo">开始体验</button><p class="in-build">build 2026-11-14.12</p></div></div>
+          <button id="introGo">开始体验</button><p class="in-build">build 2026-11-14.13</p></div></div>
         <div class="toast" id="toast"></div>
         <div class="homebar" id="homebar"></div>
       </div></div>
@@ -2025,11 +2025,15 @@ function cmpWrap(cards){
 function fmt(t){
   /* <FUNCTION> 是旧协议残留，模型偶尔会回退，这里兜底剥掉，绝不显示给用户 */
   let s = String(t == null ? '' : t).replace(/<FUNCTION>[\s\S]*?<\/FUNCTION>/g, '');
-  /* 一个回答只留最后一个组件块：模型常先给图鉴卡再给商品卡，两张叠在一起很啰嗦 */
+  /* SP 要求「只选一个组件」，模型有时会给两张。这里兜底：
+     优先保留商品/视频卡（购买与观看意图），没有才保留图鉴卡 */
   const spans = [...s.matchAll(/<COMPONENT>[\s\S]*?<\/COMPONENT>/g)];
   if (spans.length > 1) {
-    for (let k = spans.length - 2; k >= 0; k--) {
+    const trade = spans.filter(m => /"component"\s*:\s*"(Goods|Video)"/.test(m[0]));
+    const keep = (trade.length ? trade[trade.length - 1] : spans[spans.length - 1]);
+    for (let k = spans.length - 1; k >= 0; k--) {
       const m = spans[k];
+      if (m.index === keep.index) continue;
       s = s.slice(0, m.index) + s.slice(m.index + m[0].length);
     }
   }
