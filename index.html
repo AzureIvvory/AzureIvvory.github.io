@@ -718,7 +718,7 @@ body.mob input,body.mob textarea{font-size:16px}
           <b id="introT">视搜多轮多图 · 现场体验</b>
           <p>拍照或从相册选图，可上传多张图片 &amp; 连续追问，体验 AI 试穿、改图。</p>
           <p class="in-note">你的照片和问题会发送给第三方模型服务（DeepSeek、火山方舟）用于生成回答。请不要拍摄证件、隐私等敏感内容。</p>
-          <button id="introGo">开始体验</button><p class="in-build">build 2026-11-13.9b</p></div></div>
+          <button id="introGo">开始体验</button><p class="in-build">build 2026-11-13.9c</p></div></div>
         <div class="toast" id="toast"></div>
         <div class="homebar" id="homebar"></div>
       </div></div>
@@ -2750,7 +2750,7 @@ addEventListener('resize', fit); fit();
 show('entry');
 
 /* ---------- 单页版收尾 ---------- */
-if(!CFG.set){ $('setOpen').hidden=true; if(CFG.thinkSet) $('thinkOn').checked=CFG.think; $('webSearch').checked=false   /* 演示不需要联网：卡片本身就是抖音搜索入口 */; $('genOn').checked=true; $('spText').value=SP_DEFAULT; }
+if(!CFG.set){ $('setOpen').hidden=true; if(CFG.thinkSet) $('thinkOn').checked=CFG.think; $('webSearch').checked=true    /* 联网搜索：搜同款 / 查价格依赖它 */; $('genOn').checked=true; $('spText').value=SP_DEFAULT; }
 $('genSize').value=CFG.size; updateTail();
 if(CFG.key){
   $('intro').hidden=false;
