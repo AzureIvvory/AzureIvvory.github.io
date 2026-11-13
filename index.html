@@ -718,7 +718,7 @@ body.mob input,body.mob textarea{font-size:16px}
           <b id="introT">视搜多轮多图 · 现场体验</b>
           <p>拍照或从相册选图，可上传多张图片 &amp; 连续追问，体验 AI 试穿、改图。</p>
           <p class="in-note">你的照片和问题会发送给第三方模型服务（DeepSeek、火山方舟）用于生成回答。请不要拍摄证件、隐私等敏感内容。</p>
-          <button id="introGo">开始体验</button><p class="in-build">build 2026-11-14.2</p></div></div>
+          <button id="introGo">开始体验</button><p class="in-build">build 2026-11-14.3</p></div></div>
         <div class="toast" id="toast"></div>
         <div class="homebar" id="homebar"></div>
       </div></div>
@@ -1169,13 +1169,18 @@ const ENG = (() => {
   function genFail(e) {
     const raw = String((e && e.message) || e || '');
     try { console.warn('[gen]', raw); } catch (_) {}
-    const lo = raw.toLowerCase();
+    const lo = raw.toLowerCase(), code = (e && e.code) || 0;
+    const NET = { ui: '网络不太稳定，没连上，再试一次', model: '网络不稳定' };
+    /* 顺序很关键：先看状态码和网络标记，再做文本匹配，
+       否则 "generate" 里的 rate 会把普通失败误判成限流 */
+    if ((e && e.net) || code === 0 || /failed to fetch|networkerror|load failed|net::/.test(lo)) return NET;
+    if (code === 401 || code === 403) return { ui: '生图服务暂时不可用', model: '生图服务未授权' };
+    if (code === 429) return { ui: '现在生图的人比较多，稍后再试', model: '同时生图的人太多' };
+    if (code >= 500) return { ui: '生图服务暂时不可用，稍后再试', model: '生图服务暂时不可用' };
     if (/copyright|版权/.test(lo)) return { ui: '这张图涉及版权限制，换一张试试', model: '这张图涉及版权限制，建议换一张图' };
     if (/sensitive|risk|police|policy|审核|违规|inappropriate/.test(lo)) return { ui: '这张图没有通过内容审核，换一张试试', model: '这张图没有通过内容审核，建议换一张' };
-    if (/401|403|unauthor|forbidden|api key/.test(lo)) return { ui: '生图服务暂时不可用', model: '生图服务未授权' };
-    if (/429|rate|too many|限流/.test(lo)) return { ui: '现在生图的人比较多，稍后再试', model: '同时生图的人太多' };
-    if (/timeout|timed out|etimedout|network|fetch/.test(lo)) return { ui: '网络不太稳定，没连上，再试一次', model: '网络不稳定' };
-    if (/5\d\d|server|internal|unavailable/.test(lo)) return { ui: '生图服务暂时不可用，稍后再试', model: '生图服务暂时不可用' };
+    if (/timeout|timed out|etimedout/.test(lo)) return NET;
+    if (/too many requests|\b429\b|限流/.test(lo)) return { ui: '现在生图的人比较多，稍后再试', model: '同时生图的人太多' };
     return { ui: '这张图没生成成功，换一张再试', model: '这次没有生成成功' };
   }
   async function runTool(call_, question, n, emit, reg, turn, genCount, size, signal) {
@@ -1228,8 +1233,10 @@ const ENG = (() => {
       emit({ type: 'round', n: round + 1 });
       const res = await openChat(withPhase(msgs, TOOL_PHASE), tools, think, signal);
       const [msg] = await streamChat(res, (kind, text) => { if (kind === 'reasoning') emit({ type: 'reasoning', text }); }, signal);
-      msgs.push(msg); chain.push(msg);
+      /* 工具轮的正文是草稿：不写进消息链，否则会进入历史并污染后续追问 */
       if (!msg.tool_calls || !msg.tool_calls.length) break;
+      const draft = Object.assign({}, msg, { content: '' });
+      msgs.push(draft); chain.push(draft);
       for (const c of msg.tool_calls) {
         const [result, used] = await runTool(c, o.question || '', n, emit, reg, turn, genCount, size, signal);
         n += used;
@@ -1491,20 +1498,6 @@ async function saveHist(){
   for(const id of new Set(turns.flatMap(t=>t.imgs))){ const src=(IMG[id]&&(IMG[id].hi||IMG[id].t))||''; if(src) images[id]=src; }
   const rec={ id:S.sid, title:histTitle({turns}), updatedAt:Date.now(), turns, images };
   try{ await dbPut(rec); }catch(_){ /* 存不下就只在内存里 */ }
-  /* 同一段对话如果因为 sid 变化存成了多条，这里合并掉 */
-  const mySig=histSig(turns);
-  try{
-    for(const old of await dbAll()){
-      if(old.id===rec.id || histSig(old.turns)!==mySig) continue;
-      /* 轮次多的那份为准，另一份删掉 */
-      if((old.turns||[]).length > turns.length) { try{ await dbDel(rec.id); }catch(_){} return false; }
-      try{ await dbDel(old.id); }catch(_){}
-    }
-  }catch(_){}
-  for(let k=HIST.length-1;k>=0;k--){
-    const h=HIST[k];
-    if(h.turns && h.id!==rec.id && histSig(h.turns)===mySig && (h.turns||[]).length<=turns.length) HIST.splice(k,1);
-  }
   /* 必须用 rec.id，不能回读 S.sid：reset() 会在 await 期间把它清空，
      那样这里找不到旧条目，就会插入重复的一条 */
   const i=HIST.findIndex(h=>h.id===rec.id);
@@ -1538,13 +1531,8 @@ $('histList').addEventListener('click', e=>{ const b=e.target.closest('[data-h]'
 (function bootHist(){
   dbAll().then(all=>{
     if(!all.length){ HIST.push(...HIST_SEED); renderHist(); return; }
-    const best=new Map();
-    all.forEach(r=>{
-      const sig=histSig(r.turns), n=(r.turns||[]).length;
-      const cur=best.get(sig);
-      if(!cur || n>cur.n || (n===cur.n && r.updatedAt>cur.r.updatedAt)) best.set(sig,{r,n});
-    });
-    const keep=[...best.values()].map(x=>x.r).sort((a,b)=>b.updatedAt-a.updatedAt);
+    /* 只按更新时间排序，不再按内容合并：不同照片、同样首问的两段会话必须各自保留 */
+    const keep=all.slice().sort((a,b)=>b.updatedAt-a.updatedAt);
     keep.slice(0,HIST_MAX).forEach(r=>HIST.push(r));
     renderHist();
   }).catch(()=>{ HIST.push(...HIST_SEED); renderHist(); });
@@ -2500,6 +2488,7 @@ async function realTurn(tb, t, idx, gen){
           pauseThink();
           const chunk=j.text;
           /* 整段（缓冲后一次性给出）→ 打字机；流式小片段 → 直接追加 */
+          clearInterval(tx._type); tx._type=null;
           if(chunk.length>80){
             const from=full.length; full+=chunk;
             const total=chunk.length;
@@ -2507,6 +2496,7 @@ async function realTurn(tb, t, idx, gen){
             const step=Math.max(1, Math.ceil(total/(dur*60)));
             let shown=0; clearInterval(tx._type);
             tx._type=setInterval(()=>{
+              if(gen!==S.gen){ clearInterval(tx._type); tx._type=null; return; }
               shown=Math.min(total, shown+step);
               tx.innerHTML=fmtPartial(visiblePart(full.slice(0, from+shown)));
               if(shown>=total){ clearInterval(tx._type); tx._type=null; }
@@ -2534,6 +2524,7 @@ async function realTurn(tb, t, idx, gen){
     const why = e.code===429 ? '现在体验的人比较多，稍等几秒再试' : (e.code===401||e.code===403) ? '体验链接已失效，请找现场工作人员' : e.code===402 ? '体验额度已用完，请找现场工作人员'
       : e.net ? '网络不太稳定，没有连上' : '这次没有答出来';
     tools.innerHTML=''; gens.innerHTML=''; think.hidden=true;
+    clearInterval(tx._type); tx._type=null;
     try { console.warn('[chat]', e && (e.code ? e.code + ' ' : ''), e && e.message); } catch (_) {}
     tx.innerHTML=`<div class="failbox" role="alert"><b>${why}</b><small>换一张图，或稍后再试一次</small>${(e.code===401||e.code===403||e.code===402)?'':'<button class="pl" data-retry>重试</button>'}</div>`;
     const rb=tx.querySelector('[data-retry]');
@@ -2542,6 +2533,7 @@ async function realTurn(tb, t, idx, gen){
     S.busy=false; updatePanel(); return;
   }
   if(gen!==S.gen) return;
+  clearInterval(tx._type); tx._type=null;
   const {answer,sugg}=splitAnswer(full);
   t.answer=answer; t.sugg=sugg; t.status='done'; t.r={text:answer, items:t.genImgs.map(g=>({img:g.url, ar:g.ar, title:'', gen:true})), sugg};
   saveHist();
