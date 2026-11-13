@@ -1895,13 +1895,13 @@ function cmpCard(c){
   const href = cmpSearch(q), open = '<a class="' + (kind==='Goods'?'tt-gd':'tt-vd') + '" href="'+href+'" target="_blank" rel="noopener noreferrer">', close = '</a>';
   /* 保留卡片布局：图块位置放图标，不放照片 */
   if (kind === 'Goods') {
-    const art = cmpPhoto('Goods');
+    const art = cmpPhoto('Goods', q);
     return open +
       '<span class="tt-gd-art"'+(art?' style="background-image:url('+art+');background-size:cover;background-position:center"':'')+'>'+(art?'':'<span class="tt-gd-ic">¥</span>')+'<span class="tt-gd-buy">搜同款</span></span>'+
       '<span class="tt-gd-tx"><b>'+fmtEsc(q)+'</b><i>'+fmtEsc(p.intro || '同款商品')+'</i></span>' + close;
   }
   if (kind === 'Video') {
-    const cover = cmpPhoto('Video');
+    const cover = cmpPhoto('Video', q);
     return open +
       '<span class="tt-vd-art"'+(cover?' style="background-image:url('+cover+');background-size:cover;background-position:center"':'')+'><span class="tt-vd-play"></span></span>'+
       '<span class="tt-vd-tx"><b>'+fmtEsc(q)+'</b><i>'+fmtEsc(p.intro || '相关视频')+'</i></span>' + close;
@@ -1917,13 +1917,23 @@ function cmpCard(c){
 /* 卡片缩略图：用会话里最新的用户图（就是「同款」要搜的东西）。
    抖音搜索页有反爬 + CORS，浏览器端拿不到结果图；搜索 API 也只回文字摘要，
    所以这里不伪造商品图，直接拿用户自己的图当参照。 */
-function cmpPhoto(kind){
+function cmpPhoto(kind, q){
   try{
+    const s = String(q || '');
     if(kind === 'Goods'){
-      for(const k in GOODS){ const c=GOODS[k]; if(c && c.items && c.items[0] && c.items[0].img) return c.items[0].img(); }
+      /* 只有搜索词命中了目录里的品类才配图；没命中就留空，交给图标占位，
+         避免出现「搜椅子配毛衣图」这种明显错配 */
+      for(const k in GOODS){
+        const c = GOODS[k];
+        if(!c || !c.items || !c.items[0] || !c.items[0].img) continue;
+        const words = [c.label].concat(c.chips || []).filter(w => w && w !== '全部');
+        if(words.some(w => s.includes(w))) return c.items[0].img();
+      }
     }
     if(kind === 'Video'){
-      for(const id in IMG){ if(IMG[id] && IMG[id].video && IMG[id].t) return IMG[id].t; }
+      if(/教程|打理|穿搭|发型|化妆|妆|教学|怎么|做法/.test(s)){
+        for(const id in IMG){ if(IMG[id] && IMG[id].video && IMG[id].t) return IMG[id].t; }
+      }
     }
   }catch(_){}
   return '';
