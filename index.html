@@ -722,7 +722,7 @@ body.mob input,body.mob textarea{font-size:16px}
           <b id="introT">视搜多轮多图 · 现场体验</b>
           <p>拍照或从相册选图，可上传多张图片 &amp; 连续追问，体验 AI 试穿、改图。</p>
           <p class="in-note">你的照片和问题会发送给第三方模型服务（DeepSeek、火山方舟）用于生成回答。请不要拍摄证件、隐私等敏感内容。</p>
-          <button id="introGo">开始体验</button><p class="in-build">build 2026-11-14.14</p></div></div>
+          <button id="introGo">开始体验</button><p class="in-build">build 2026-11-14.15</p></div></div>
         <div class="toast" id="toast"></div>
         <div class="homebar" id="homebar"></div>
       </div></div>
@@ -1228,7 +1228,14 @@ const ENG = (() => {
     const turn = messages.filter(m => m.role === 'user').length;
     const ctx = contextBlock(messages, reg);
     if (ctx) { if (msgs[0] && msgs[0].role === 'system') msgs[0] = Object.assign({}, msgs[0], { content: msgs[0].content + '\n\n' + ctx }); else msgs.unshift({ role: 'system', content: ctx }); }
-    const tools = o.textOnly ? [] : (o.search ? TOOLS : []).concat(o.gen && CFG.ark ? [GEN_TOOL] : []);
+    /* 只在这轮真的用得上工具时才把工具递过去：
+       不需要工具的问答走单次请求（首轮直接出字），不再白跑一次隐藏请求。 */
+    const q = String(o.question || '');
+    const SEARCH_INTENT = /多少钱|价格|售价|在哪买|哪里买|购买|链接|同款|品牌|型号|官网|真假|正品|最新|新闻|评测|测评|上市|发售|值得买|哪家/;
+    const GEN_INTENT = /试穿|试一下|穿上|换上|换装|换件|换衣|换成|换掉|换个|换背景|背景换|换色|改色|改图|改成|生成|画一|画个|画张|做张|效果图|渲染|变装|上身|p图|P图/;
+    const wantSearch = o.search && SEARCH_INTENT.test(q);
+    const wantGen = o.gen && CFG.ark && GEN_INTENT.test(q);
+    const tools = o.textOnly ? [] : (wantSearch ? TOOLS : []).concat(wantGen ? [GEN_TOOL] : []);
     const size = GEN_SIZES.includes(o.size) ? o.size : CFG.size, chain = [], genCount = { n: 0 };
     let n = 1;
     /* 两阶段：工具轮的正文一律丢弃（那是模型的计划）。只有真的调用过工具，才单独
